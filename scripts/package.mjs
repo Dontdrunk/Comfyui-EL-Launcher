@@ -9,6 +9,8 @@
  * 用法：node scripts/package.mjs [额外的 electron-builder 参数]
  */
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -35,7 +37,23 @@ const child = spawn(
   }
 )
 
+/** electron-builder 的 latest.yml 只列安装包。便携版也要写进去，否则便携版点更新找不到文件。 */
+function includePortable(dir) {
+  const ymlPath = join(dir, 'latest.yml')
+  const text = readFileSync(ymlPath, 'utf8')
+  const portable = readdirSync(dir).find((name) => name.endsWith('-portable.exe'))
+  if (!portable || text.includes(portable)) return
+  const file = join(dir, portable)
+  const sha512 = createHash('sha512').update(readFileSync(file)).digest('base64')
+  const size = statSync(file).size
+  const entry = `  - url: ${portable}\n    sha512: ${sha512}\n    size: ${size}\n`
+  writeFileSync(ymlPath, text.replace(/^path:/m, `${entry}path:`))
+}
+
 child.on('close', (code, signal) => {
   if (signal) process.kill(process.pid, signal)
-  else process.exit(code ?? 0)
+  else {
+    if (code === 0) includePortable(join(root, 'release'))
+    process.exit(code ?? 0)
+  }
 })

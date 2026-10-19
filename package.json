@@ -1,6 +1,6 @@
 {
   "name": "explorer-launcher",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "探索者启动器 - ComfyUI 桌面启动器",
   "main": "./out/main/index.js",
