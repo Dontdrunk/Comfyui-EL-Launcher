@@ -65,8 +65,8 @@ export function registerVersionIpc(): void {
     IPC.versionFetchRemote,
     async (_e, root?: string): Promise<{ ok: boolean; error: string | null }> => {
       try {
-        // 缺的发版 tag，外加 master 最近的提交。后者不取的话，「全部提交」停在旧的 origin/master。
-        await fetchRemote(pickRoot(root), undefined, undefined, 120_000)
+        // 补齐缺的发版 tag 和 master 完整历史，供版本列表筛选与展示。
+        await fetchRemote(pickRoot(root), undefined, undefined, 600_000)
         return { ok: true, error: null }
       } catch (err) {
         // 离线不该让整页失败：本地历史照样能看，只是不是最新的

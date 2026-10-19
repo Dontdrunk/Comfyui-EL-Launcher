@@ -170,12 +170,8 @@ export default function Versions(): React.JSX.Element {
   /* ── 版本行 ── */
 
   /*
-   * 发版版本直接列本地 tag，而不是在提交历史里筛。
-   *
-   * 提交列表只有 300 条（git log --all -n300），本地却有 200+ 个 tag，
-   * 绝大多数 tag 指向的提交压根不在这个窗口里 —— 早先在窗口内筛 tag，
-   * 200 多个版本只能筛出两三个。tag 才是权威口径，也和上面判定
-   * 「最新版本」用的是同一份 state.refs，两处不会打架。
+   * 发版版本直接列本地 tag；tag 是发版的权威口径，也和上面判定
+   * 「最新版本」用的是同一份 state.refs。
    */
   const releaseTags = useMemo(
     () => (state?.refs ?? []).filter((r) => r.kind === 'tag' && /^v\d+\.\d+/i.test(r.name)),
@@ -602,7 +598,7 @@ export default function Versions(): React.JSX.Element {
                 ? '换个关键字，或把范围切回「全部提交」试试。'
                 : listFilter === 'release'
                   ? '本地没有形如 vX.Y.Z 的 tag。浅克隆下 tag 需要先浅取到本地，才会出现在这里。'
-                  : '列表来自本地 git 历史；浅克隆下能看到的范围由已经浅取过的版本决定。'
+                  : '列表来自本地 git 历史；点击刷新会补齐 master 完整历史，离线时显示本地已有记录。'
             }
           />
         ) : (

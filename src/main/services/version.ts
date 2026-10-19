@@ -227,17 +227,16 @@ export interface FetchResult {
  * 起点是所有 ref（--all），不做发行线筛选：若这里只看 HEAD + tag，
  * 「全部提交」就和「发版版本」几乎一样了 —— 本机上百个 refs/remotes/origin/* 分支尖端上
  * 正在进行的提交（merge / spike / CI）会一条都看不到。
- * master 不在这份列表里的原因通常是刷新没更新 origin/master，见 fetchRemote。
+ * 刷新会补齐 origin/master 的完整历史；其余条目来自本地可见 refs。
  * 代价是列表里会混进版本号比当前更低的提交；这种回退风险不在这里提前筛掉，
  * 而是在点「切换使用」时由 planSwitch 提醒（见下方）。
  */
-export async function listCommits(root: string, limit = 300): Promise<CommitInfo[]> {
+export async function listCommits(root: string): Promise<CommitInfo[]> {
   const paths = resolveComfyPaths(root)
   const out = await gitSoft(paths.comfyDir, [
     'log',
     '--all',
     '--no-decorate',
-    `-n${limit}`,
     '--format=%H|%h|%cI|%s'
   ])
 
@@ -313,36 +312,37 @@ export async function fetchRemoteTags(
   return missing
 }
 
-/**
- * 刷新时 master 要带上的历史条数。
- * 深度 1 只会落下尖端那一个提交，尖端和上一次之间的内核在「全部提交」里看不见。
- * 100 条在这台浅克隆上实测约 2 秒，能盖住最近几个发版之间的 master。
- */
-const REFRESH_MASTER_DEPTH = 100
-
-/** 定向浅取 master 分支并落到远端跟踪引用。depth 默认 1，给「切到分支」用。 */
+/** 定向取 master。切换分支只取尖端；刷新时补齐 master 全部历史。 */
 export async function fetchMaster(
   root: string,
   onLine?: (s: LogStream, t: string) => void,
   signal?: AbortSignal,
-  depth = 1,
+  depth: number | 'all' = 1,
   timeoutMs = 120_000
 ): Promise<FetchResult> {
   const paths = resolveComfyPaths(root)
   const started = Date.now()
   onLine?.(
     'system',
-    depth > 1
-      ? `[版本] 正在下载 master 最近 ${depth} 条提交…`
-      : '[版本] 正在下载 master 最新代码（浅取）…'
+    depth === 'all'
+      ? '[版本] 正在下载 master 全部提交历史…'
+      : depth > 1
+        ? `[版本] 正在下载 master 最近 ${depth} 条提交…`
+        : '[版本] 正在下载 master 最新代码（浅取）…'
   )
   // 加 + 强制更新：浅克隆里 origin/master 是深度 1 的碎片，新的 master 尖端与它没有
   // 父子关系，不加 + 会被判 non-fast-forward 直接失败（刷新因此曾经每次都报联网失败）。
-  await git(
-    paths.comfyDir,
-    ['fetch', `--depth=${depth}`, 'origin', '+master:refs/remotes/origin/master'],
-    { onLine, signal, timeoutMs }
-  )
+  const fetchDepth =
+    depth === 'all'
+      ? (await git(paths.comfyDir, ['rev-parse', '--is-shallow-repository'])) === 'true'
+        ? ['--unshallow']
+        : []
+      : [`--depth=${depth}`]
+  await git(paths.comfyDir, ['fetch', ...fetchDepth, 'origin', '+master:refs/remotes/origin/master'], {
+    onLine,
+    signal,
+    timeoutMs
+  })
   const seconds = (Date.now() - started) / 1000
   const tip = await gitSoft(paths.comfyDir, ['rev-parse', '--short', 'refs/remotes/origin/master'])
   onLine?.('system', `[版本] master 已更新到 ${tip ?? '未知'}（${seconds.toFixed(1)} 秒）`)
@@ -353,14 +353,13 @@ export async function fetchMaster(
  * 刷新按钮的联网步骤。
  *
  * 发版 tag 和 master 各取各的：tag 决定「发版版本」和「是否最新」；
- * 「全部提交」读的是本地 git 历史，origin/master 不更新的话，默认分支上
- * 比最新 tag 更晚的提交永远进不了列表。两边互不影响，一边失败另一边的结果留着。
+ * master 补齐完整提交历史，供「全部提交」展示。两边互不影响，一边失败另一边的结果留着。
  */
 export async function fetchRemote(
   root: string,
   onLine?: (s: LogStream, t: string) => void,
   signal?: AbortSignal,
-  timeoutMs = 120_000
+  timeoutMs = 600_000
 ): Promise<void> {
   const errors: string[] = []
   try {
@@ -369,7 +368,7 @@ export async function fetchRemote(
     errors.push(err instanceof Error ? err.message : String(err))
   }
   try {
-    await fetchMaster(root, onLine, signal, REFRESH_MASTER_DEPTH, timeoutMs)
+    await fetchMaster(root, onLine, signal, 'all', timeoutMs)
   } catch (err) {
     errors.push(err instanceof Error ? err.message : String(err))
   }
