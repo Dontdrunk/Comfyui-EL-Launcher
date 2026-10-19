@@ -1,0 +1,12 @@
+# 构建脚本许可。pnpm 12 不再读取 package.json#pnpm，许可必须写在这里；
+# 留成 “set this to true or false” 之类的占位符会让 pnpm install 直接失败（ERR_PNPM_IGNORED_BUILDS）。
+# electron：当前版本已无 postinstall（二进制改为惰性下载，见 scripts/ensure-electron.mjs），
+#   这里放行是为了将来版本把 postinstall 加回来时不再被拦。
+# electron-winstaller：只服务 Squirrel.Windows 目标，本项目只出 NSIS + portable，明确拒绝。
+allowBuilds:
+  electron: true
+  electron-winstaller: false
+minimumReleaseAgeExclude:
+  - electron-vite@6.0.0
+  - react-dom@19.3.1
+  - react@19.3.1

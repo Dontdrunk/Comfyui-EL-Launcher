@@ -1,0 +1,38 @@
+{
+  "name": "explorer-launcher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "探索者启动器 - ComfyUI 桌面启动器",
+  "main": "./out/main/index.js",
+  "license": "MIT",
+  "scripts": {
+    "dev": "node scripts/run.mjs dev",
+    "build": "node scripts/run.mjs build",
+    "preview": "node scripts/run.mjs preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "check:contrast": "node scripts/check-contrast.mjs",
+    "postinstall": "node scripts/ensure-electron.mjs",
+    "package": "node scripts/run.mjs build && node scripts/package.mjs",
+    "icon": "node -e \"console.log('请用内置解释器运行: python_embeded\\\\python.exe scripts\\\\make-icon.py')\""
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^6.0.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "6.0.3",
+    "vite": "^8.3.4",
+    "zustand": "^5.0.15"
+  },
+  "dependencies": {
+    "lucide": "^1.57.0",
+    "morphicons": "^1.7.1"
+  }
+}

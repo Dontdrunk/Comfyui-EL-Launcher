@@ -1,0 +1,365 @@
+/* ══════════════════════════════════════════════════════════════════
+ * 疯狂AI启动器 v5.0 视觉复刻层
+ *
+ * 数值来源：原版解包资源，逐值抄录，未做主观调整
+ *   · res/cssjs/styles.css          主题变量 / 外壳 / 滚动条 / 工具类
+ *   · pages/gn/nhcss.css            AI引擎页专用规则
+ *   · res/wai/dark.css-vars.css     Element Plus 暗色变量（已单独引入）
+ *
+ * 载入顺序要求：element-plus.css → element-plus-dark.css → crazy.css
+ * ══════════════════════════════════════════════════════════════════ */
+
+/* ── 主题变量（原 styles.css :root + prefers-color-scheme） ── */
+:root {
+  color-scheme: dark;
+
+  --hbtnds: linear-gradient(90deg, #1a00ff -21.18%, var(--el-color-primary) 99.84%); /* 大按钮鼠标经过色 */
+  --abs: #ff00c0; /* 功能分类说明链接鼠标经过颜色 */
+  --btnds: linear-gradient(90deg, #ff1921 -21.18%, #e5105d 99.84%); /* 大按钮默认色 */
+
+  --webkit-link: #fff; /* 主文字色 */
+  --webkit-link2: #dbdbdb; /* 次主文字色 */
+  --bgs: #000000; /* 主颜色（标题栏 / 侧边栏） */
+  --cdlibg: rgb(48 48 48 / 90%); /* 按钮菜单选择颜色 */
+  --bodyse: #0c0c0c; /* 副颜色（功能页背景） */
+  --bodyse2: #101010; /* 功能页背景 */
+  --zhezhaose: rgba(0, 0, 0, 0.8); /* 遮罩颜色 */
+  --gdts: rgb(57 57 57 / 90%); /* 滚动条颜色 */
+  --card-bks: #1e1d1d; /* 卡片边框颜色 */
+  --bbhse: #afafaf; /* 版本号颜色 */
+
+
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  overflow: hidden;
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+  background-color: var(--bodyse);
+  color: var(--webkit-link);
+}
+
+/*
+ * 滚动条刻意不在这里定义。
+ * 原版是 6px + 圆角 + --gdts 灰，压过 global.css 后变成：
+ *   6px 宽、滑块 #393939 落在 #262729 表体上，对比度 1.31:1 —— 基本看不见；
+ *   还带 5px 圆角，违反「圆角一律 0，唯一允许的圆是圆点」这条界面契约。
+ * 滚动条统一由仪表台层（global.css）负责。
+ */
+
+a {
+  color: var(--webkit-link);
+  text-decoration: none;
+  cursor: pointer;
+}
+a,
+button {
+  transition: all 0.6s;
+}
+.ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+ * 外壳：标题栏 60px + 侧边栏 85px（原版 .index .el-header / .el-aside）
+ * ══════════════════════════════════════════════════════════════════ */
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bodyse);
+  overflow: hidden;
+}
+
+.titlebar {
+  height: 60px;
+  flex: 0 0 60px;
+  background-color: var(--bgs);
+  display: flex;
+  align-items: flex-start;
+  position: relative;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.titlebar__logo {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  /* 星标与名字同属品牌单元 */
+  gap: 9px;
+  /* 撑满栏高后自行居中。原先靠 padding-top:13px 硬顶，
+     是按 30px 图标 + 13px 上边距配的；图标一旦变小整组就会浮在栏的上半部分 */
+  height: 100%;
+  padding-left: 15px;
+  white-space: nowrap;
+}
+.titlebar__name {
+  font-size: 19px;
+  color: var(--webkit-link);
+}
+.titlebar__ver {
+  font-size: 13px;
+  /* 版本号是旁注、不是品牌的一部分，要比 9px 再拉开一档 */
+  margin-left: 7px;
+  /* 原版的 --bbhse #afafaf 在 #f3f3f3 上只有 2.0:1，13px 正文级文字看不清，
+     换仪表台的 --fg-muted（亮色 #55565e ≈ 6.6:1，暗色 #a0a0a0 ≈ 8.6:1） */
+  color: var(--fg-muted);
+}
+
+/* 拖拽区：占据中间所有空白（原版 .yidonqu 宽度 calc(100% - 600px)） */
+.titlebar__drag {
+  height: 100%;
+  display: inline-block;
+  width: calc(100% - 600px);
+  -webkit-app-region: drag;
+}
+
+.titlebar__actions {
+  text-align: right;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: center;
+  position: absolute;
+  right: 6px;
+  -webkit-app-region: no-drag;
+}
+.titlebar__actions button {
+  cursor: pointer;
+  font-size: 14px;
+  padding: 9px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 14px 0;
+  border-radius: 6px;
+  transition: all 0.5s;
+  position: relative;
+  background: transparent;
+  border: 0;
+  color: var(--webkit-link);
+  line-height: 1;
+}
+.titlebar__actions button:hover {
+  background: var(--cdlibg);
+}
+.titlebar__actions button.is-danger:hover {
+  background-color: red;
+}
+.app__body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+.sidebar {
+  width: 85px;
+  flex: 0 0 85px;
+  background-color: var(--bgs);
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+.sidebar__nav {
+  padding-top: 10px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.sidebar__group {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+  width: 100%;
+}
+.sidebar__group--bottom {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+}
+
+.navitem {
+  cursor: pointer;
+  border-radius: 12px;
+  width: 65px;
+  height: 65px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 10px;
+  transition: all 0.6s;
+  background: transparent;
+  border: 0;
+  color: var(--webkit-link);
+  padding: 0;
+  font-family: inherit;
+}
+.navitem .ic {
+  display: block;
+  font-size: 22px;
+  margin-bottom: 5px;
+}
+.navitem span {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.navitem:hover,
+.navitem--active {
+  background: var(--cdlibg);
+}
+
+.app__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  background-color: var(--bodyse);
+  padding: 0;
+  margin: 0;
+}
+.app__page {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ==================================================================
+ * 亮色主题（原 styles.css @media (prefers-color-scheme: light) 的同一组值）
+ * 原版靠系统配色切换，本项目靠 html.light 类切换。
+ * ================================================================== */
+html.light {
+  color-scheme: light;
+
+  --webkit-link: rgb(49, 49, 49);
+  --webkit-link2: #616161;
+  --bgs: rgb(243, 243, 243);
+  --cdlibg: #fff;
+  --bodyse: rgb(247, 247, 247);
+  --bodyse2: var(--bodyse);
+  --zhezhaose: rgba(247, 247, 247, 0.8);
+  --gdts: #ddd;
+  --card-bks: rgb(235, 235, 235);
+  --bbhse: #afafaf;
+}
+
+/* ==================================================================
+ * 收尾覆盖：压过 global.css 里同名/同特异性的「仪表台」外壳规则
+ * 本文件在 main.tsx 中最后引入，因此等特异性下以这里为准。
+ * ================================================================== */
+
+.app .sidebar {
+  flex: 0 0 85px;
+  border-right: 0;
+  background: var(--bgs);
+  transition: none;
+}
+.app .sidebar__nav {
+  padding: 10px 0 0 0;
+  gap: 0;
+  overflow: hidden;
+  align-items: center;
+}
+.sidebar__group li {
+  display: contents;
+}
+.app .navitem {
+  gap: 0;
+  text-align: center;
+  border: 0;
+  min-height: 0;
+}
+/* 原版激活态是整块填充，没有左侧亮条 */
+.app .navitem--active::before {
+  display: none;
+}
+.app .navitem--active,
+.app .navitem:hover {
+  background: var(--cdlibg);
+  color: var(--webkit-link);
+  font-weight: 400;
+}
+.app .navitem .ic {
+  display: block;
+  font-size: 22px;
+  margin-bottom: 5px;
+}
+
+.app .titlebar {
+  height: 60px;
+  flex: 0 0 60px;
+  padding: 0;
+  gap: 0;
+  border-bottom: 0;
+  background: var(--bgs);
+  align-items: flex-start;
+  z-index: 20;
+}
+.app .titlebar__name {
+  font-size: 19px;
+  font-weight: 400;
+}
+.app .titlebar__ver {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  font-family: inherit;
+}
+.app .titlebar__actions {
+  gap: 0;
+}
+
+.app .app__main {
+  background: var(--bodyse);
+}
+/* 旧页面：.app__page 是纵向 flex，窗口高度降到原版的 700 后，
+   面板会被 flex-shrink 压扁到比内容还矮（.panel 有 overflow:hidden，内容直接被裁掉）。
+   这里禁止直接子元素收缩，把它们交回内容高度，由 .app__main 滚动。 */
+.app .app__page > * {
+  flex-shrink: 0;
+}
+/* 声明了 fill 的面板仍要吃掉剩余高度 */
+.app .app__page > .panel--fill {
+  flex-shrink: 1;
+  flex-grow: 1;
+}
+
+/* 底部状态轨道改为原版配色 */
+.app .statusrail {
+  background: var(--bgs);
+  border-top: 1px solid var(--card-bks);
+}
+
+
+/* 声明 fill 的表格面板：表体自己滚，页面底部不留白 */
+.panel--fill .table-wrap {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* fill 面板常常嵌在页面内的容器里（概览/模型管理），祖先链也得能撑开，
+   否则那条 div 自己不参与伸缩，里面的面板再 fill 也长不动。 */
+.app .app__page > *:has(.panel--fill) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.app .app__page > *:has(.panel--fill) > * {
+  flex-shrink: 0;
+}
+.app .app__page > *:has(.panel--fill) > .panel--fill {
+  flex: 1;
+  min-height: 0;
+}

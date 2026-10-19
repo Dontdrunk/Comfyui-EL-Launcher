@@ -1,0 +1,233 @@
+/* ══════════════════════════════════════════════════════════════════
+ * 探索者启动器 设计令牌 · 仪表台（Direction A）
+ *
+ * 第一段是 ComfyUI 官方前端（comfyui-frontend-package 1.55.17）的原始调色板，
+ * 从 static/assets/main-NWEiSzjK.css 中逐值提取，未做任何主观调整。
+ * 第二段是按官方语义令牌（:root / .dark-theme）映射出的双主题变量。
+ *
+ * 仪表台规则：
+ *   · 所有面 0 圆角，唯一允许的圆是圆点（LED / 开关滑块 / 比例条端点）
+ *   · 只用 1px 发丝线分层，不用投影
+ *   · 中文标签不做 uppercase / letter-spacing（对中文无效，只把字拉散）
+ *   · 等宽体只给数字、路径、提交号、端口；中文只用 UI 字体
+ * ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── ComfyUI 原始调色板 ── */
+  --c-white: #fff;
+  --c-black: #000;
+
+  --c-smoke-100: #f3f3f3;
+  --c-smoke-200: #e9e9e9;
+  --c-smoke-300: #e1e1e1;
+  --c-smoke-400: #d9d9d9;
+  --c-smoke-500: #c5c5c5;
+  --c-smoke-600: #b4b4b4;
+  --c-smoke-700: #a0a0a0;
+  --c-smoke-800: #8a8a8a;
+
+  --c-charcoal-100: #55565e;
+  --c-charcoal-200: #494a50;
+  --c-charcoal-300: #3c3d42;
+  --c-charcoal-400: #313235;
+  --c-charcoal-500: #2d2e32;
+  --c-charcoal-600: #262729;
+  --c-charcoal-700: #202121;
+  --c-charcoal-800: #171718;
+  --c-charcoal-950: #09090a;
+
+  --c-azure-300: #78bae9;
+  --c-azure-400: #31b9f4;
+  --c-azure-600: #0b8ce9;
+  --c-cobalt-800: #185a8b;
+
+  --c-electric-400: #f0ff41;
+  --c-sapphire-700: #172dd7;
+
+  --c-coral-500: #f75951;
+  --c-coral-600: #e04e48;
+  --c-coral-700: #b33a3a;
+
+  --c-gold-400: #fcbf64;
+  --c-gold-600: #fd9903;
+
+  --c-jade-600: #00cd72;
+
+  --c-ocean-300: #badde8;
+  --c-ocean-600: #2f687a;
+  --c-ocean-900: #253236;
+
+  --c-ash-500: #828282;
+  --c-ash-800: #444;
+
+  --c-zinc-300: #d4d4d8;
+  --c-zinc-500: #71717b;
+  --c-zinc-700: #3f3f46;
+  --c-zinc-800: #27272a;
+
+  --c-error: #962a2a;
+  --c-danger-100: #c02323;
+  --c-danger-200: #d62952;
+
+  /* ── ComfyUI 传统变量（其菜单/输入框真正在用的值） ── */
+  --comfy-menu-bg: #353535;
+  --comfy-menu-secondary-bg: #292929;
+  --comfy-input-bg: #222;
+  --comfy-border-color: #4e4e4e;
+  --comfy-error-text: #f44;
+  --comfy-topbar-height: 2.5rem;
+
+  /* ── 字体 ── */
+  --font-ui: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei',
+    system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Mono', 'Cascadia Code', Consolas, 'Sarasa Mono SC', 'Microsoft YaHei UI',
+    ui-monospace, monospace;
+
+  /* ── 圆角：仪表台一律直角；圆点由各自规则用 50% 单独声明 ── */
+  --r-xs: 0;
+  --r-sm: 0;
+  --r-md: 0;
+  --r-lg: 0;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* ── 密度 ── */
+  --titlebar-h: 34px;
+  --statusrail-h: 26px;
+  --sidebar-w: 196px;
+  --row-h: 30px;
+
+  /* ── 字号：中文最小 11px，10px 中文不可读 ── */
+  --fs-micro: 11px;
+  --fs-xs: 12px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+
+  --dur-fast: 0.1s;
+  --dur: 0.16s;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+ * 暗色主题（对齐官方 .dark-theme）
+ * ══════════════════════════════════════════════════════════════════ */
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg-app: var(--c-charcoal-800);
+  --bg-canvas: var(--c-charcoal-700);
+  --bg-surface: var(--c-charcoal-600);
+  --bg-surface-2: var(--c-charcoal-500);
+  --bg-hover: var(--c-charcoal-400);
+  --bg-sunken: #101011;
+  --bg-terminal: #0c0c0d;
+  --bg-input: var(--comfy-input-bg);
+
+  --stroke: var(--c-charcoal-400);
+  --stroke-soft: #26272a;
+  --stroke-strong: var(--comfy-border-color);
+
+  --fg: var(--c-white);
+  --fg-muted: var(--c-smoke-700);
+  --fg-dim: var(--c-smoke-700);
+  --fg-faint: var(--c-charcoal-100);
+
+  /* 强调色三分：填充 / 线 / 柔和底。填充必须能托住白字（≥4.5:1）。 */
+  --accent: var(--c-azure-600);
+  --accent-strong: var(--c-cobalt-800);
+  --accent-strong-hover: #1d6ea8;
+  --accent-line: var(--c-azure-400);
+  --accent-hover: var(--c-azure-400);
+  --accent-fg: var(--c-white);
+  --accent-soft: color-mix(in srgb, var(--c-azure-600) 18%, transparent);
+
+  --brand: var(--c-electric-400);
+  --brand-blue: var(--c-sapphire-700);
+
+  /* 语义色：线/点用 --ok/--warn/--danger，文字用 --*-text（保证 4.5:1） */
+  --ok: var(--c-jade-600);
+  --warn: var(--c-gold-600);
+  --danger: var(--c-coral-700);
+  --danger-bright: var(--c-coral-500);
+  --error-text: var(--comfy-error-text);
+
+  --ok-text: var(--c-jade-600);
+  --warn-text: var(--c-gold-600);
+  --danger-text: var(--c-coral-500);
+  /* 实心红填充：必须能托住白字（白字 5.86:1） */
+  --danger-solid: var(--c-coral-700);
+
+  --ok-soft: color-mix(in srgb, var(--c-jade-600) 16%, transparent);
+  --warn-soft: color-mix(in srgb, var(--c-gold-600) 16%, transparent);
+  --danger-soft: color-mix(in srgb, var(--c-coral-700) 22%, transparent);
+
+  --led-off: #3a3b3f;
+  /* 滑块落在 --bg-surface(#262729) 上，3.25:1。原值 #3c3d42 只有 1.35:1，等于隐形 */
+  --scrollbar-thumb: #74757b;
+  --flash: color-mix(in srgb, var(--c-azure-400) 16%, transparent);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+ * 亮色主题（对齐官方 :root）
+ * ══════════════════════════════════════════════════════════════════ */
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-app: var(--c-white);
+  --bg-canvas: var(--c-smoke-100);
+  --bg-surface: var(--c-white);
+  --bg-surface-2: var(--c-smoke-200);
+  --bg-hover: var(--c-smoke-200);
+  --bg-sunken: #ececec;
+  --bg-terminal: #f7f7f7;
+  --bg-input: var(--c-white);
+
+  --stroke: var(--c-smoke-300);
+  --stroke-soft: #ededed;
+  --stroke-strong: var(--c-smoke-500);
+
+  --fg: var(--c-charcoal-800);
+  --fg-muted: var(--c-charcoal-100);
+  --fg-dim: var(--c-charcoal-100);
+  --fg-faint: var(--c-smoke-600);
+
+  --accent: var(--c-azure-400);
+  --accent-strong: var(--c-cobalt-800);
+  --accent-strong-hover: #12466d;
+  --accent-line: var(--c-cobalt-800);
+  --accent-hover: var(--c-cobalt-800);
+  --accent-fg: var(--c-white);
+  --accent-soft: color-mix(in srgb, var(--c-azure-400) 20%, transparent);
+
+  --brand: #b8c400;
+  --brand-blue: var(--c-sapphire-700);
+
+  --ok: #00a95c;
+  --warn: var(--c-gold-600);
+  --danger: var(--c-coral-600);
+  --danger-bright: var(--c-coral-500);
+  --error-text: var(--c-error);
+
+  --ok-text: #0b6b3f;
+  --warn-text: #7a4a00;
+  --danger-text: #a02318;
+  --danger-solid: #a02318;
+
+  --ok-soft: color-mix(in srgb, #00a95c 12%, transparent);
+  --warn-soft: color-mix(in srgb, var(--c-gold-600) 14%, transparent);
+  --danger-soft: color-mix(in srgb, var(--c-coral-600) 12%, transparent);
+
+  --led-off: #cfcfcf;
+  /* 落在白卡片上 3.23:1。原值 #c9c9c9 只有 1.62:1 */
+  --scrollbar-thumb: #8f8f8f;
+  --flash: color-mix(in srgb, var(--c-azure-400) 22%, transparent);
+}
