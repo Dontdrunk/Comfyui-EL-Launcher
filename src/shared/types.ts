@@ -205,6 +205,11 @@ export interface CommitInfo {
   subject: string
 }
 
+export interface CommitPage {
+  commits: CommitInfo[]
+  total: number
+}
+
 export interface VersionState {
   isRepo: boolean
   head: HeadInfo | null
@@ -615,7 +620,7 @@ export interface LauncherApi {
   gitCheck(): Promise<GitAvailability>
   getVersionState(root?: string): Promise<VersionState>
   listRemoteTags(root?: string): Promise<{ name: string; commit: string }[]>
-  listCommits(root?: string): Promise<CommitInfo[]>
+  listCommits(root?: string, offset?: number, limit?: number): Promise<CommitPage>
   /**
    * 联网拉一次远端。版本列表读的是本地 git 历史，
    * 不 fetch 就永远停在旧状态 —— 当初「刷新看不到新版本」就是这个原因。

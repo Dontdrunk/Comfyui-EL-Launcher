@@ -57,8 +57,8 @@ export function registerVersionIpc(): void {
     return listRemoteTags(pickRoot(root))
   })
 
-  ipcMain.handle(IPC.versionCommits, async (_e, root?: string) => {
-    return listCommits(pickRoot(root))
+  ipcMain.handle(IPC.versionCommits, async (_e, root?: string, offset?: number, limit?: number) => {
+    return listCommits(pickRoot(root), offset, limit)
   })
 
   ipcMain.handle(

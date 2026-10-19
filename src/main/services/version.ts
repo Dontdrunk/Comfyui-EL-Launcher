@@ -2,7 +2,7 @@ import type {
   BackupSnapshot,
   HeadInfo,
   LogStream,
-  CommitInfo,
+  CommitPage,
   RefKind,
   RequirementsDiff,
   SwitchPlan,
@@ -231,16 +231,25 @@ export interface FetchResult {
  * 代价是列表里会混进版本号比当前更低的提交；这种回退风险不在这里提前筛掉，
  * 而是在点「切换使用」时由 planSwitch 提醒（见下方）。
  */
-export async function listCommits(root: string): Promise<CommitInfo[]> {
+export async function listCommits(root: string, offset = 0, limit = 300): Promise<CommitPage> {
   const paths = resolveComfyPaths(root)
-  const out = await gitSoft(paths.comfyDir, [
-    'log',
-    '--all',
-    '--no-decorate',
-    '--format=%H|%h|%cI|%s'
+  const skip = Number.isSafeInteger(offset) ? Math.max(0, offset) : 0
+  const pageSize = Number.isSafeInteger(limit) ? Math.max(1, Math.min(300, limit)) : 300
+  const [out, count] = await Promise.all([
+    gitSoft(paths.comfyDir, [
+      'log',
+      '--all',
+      '--skip',
+      String(skip),
+      '-n',
+      String(pageSize),
+      '--no-decorate',
+      '--format=%H|%h|%cI|%s'
+    ]),
+    gitSoft(paths.comfyDir, ['rev-list', '--count', '--all'])
   ])
 
-  return (out ?? '')
+  const commits = (out ?? '')
     .split(/\r?\n/)
     .filter(Boolean)
     .map((line) => {
@@ -254,6 +263,9 @@ export async function listCommits(root: string): Promise<CommitInfo[]> {
       }
     })
     .filter((c) => c.sha.length > 0)
+
+  const total = Number(count ?? 0)
+  return { commits, total: Number.isFinite(total) ? total : 0 }
 }
 
 export async function fetchTag(

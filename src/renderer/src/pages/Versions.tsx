@@ -49,6 +49,8 @@ interface Row {
   isCurrent: boolean
 }
 
+const COMMIT_PAGE_SIZE = 300
+
 export default function Versions(): React.JSX.Element {
   const settings = useApp((s) => s.settings)
   const jobs = useApp((s) => s.jobs)
@@ -61,12 +63,17 @@ export default function Versions(): React.JSX.Element {
   const [state, setState] = useState<VersionState | null>(null)
   const [git, setGit] = useState<GitAvailability | null>(null)
   const [commits, setCommits] = useState<CommitInfo[]>([])
+  const [commitTotal, setCommitTotal] = useState(0)
+  const [moreLoading, setMoreLoading] = useState(false)
+  const listScrollRef = useRef<HTMLDivElement>(null)
+  const loadingMoreRef = useRef(false)
+  const commitRequestRef = useRef(0)
   const [listError, setListError] = useState<string | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [backups, setBackups] = useState<BackupSnapshot[]>([])
   const [backupsDir, setBackupsDir] = useState('')
   const [restoreTarget, setRestoreTarget] = useState<BackupSnapshot | null>(null)
-  const [tab, setTab] = useState<'list' | 'backup' | 'log'>('list')
+  const [tab, setTab] = useState<'list' | 'backup'>('list')
   const [listLoading, setListLoading] = useState(false)
   const [update, setUpdate] = useState<UpdateCheck | null>(null)
   const [updateLoading, setUpdateLoading] = useState(false)
@@ -87,7 +94,6 @@ export default function Versions(): React.JSX.Element {
   const [planning, setPlanning] = useState<string | null>(null)
 
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
-  const [lastResult, setLastResult] = useState<SwitchResult | null>(null)
   const [showReleaseNotes, setShowReleaseNotes] = useState(false)
 
   const running = service?.state === 'running' || service?.state === 'launching'
@@ -107,6 +113,10 @@ export default function Versions(): React.JSX.Element {
   const refreshAll = useCallback(
     async (online: boolean): Promise<void> => {
       if (!root) return
+      commitRequestRef.current += 1
+      loadingMoreRef.current = false
+      setMoreLoading(false)
+      listScrollRef.current?.scrollTo({ top: 0 })
       setBusy(true)
       setListLoading(true)
       setUpdateLoading(true)
@@ -120,13 +130,14 @@ export default function Versions(): React.JSX.Element {
         const [v, g, c, b, d] = await Promise.all([
           window.launcher.getVersionState(root),
           window.launcher.gitCheck(),
-          window.launcher.listCommits(root),
+          window.launcher.listCommits(root, 0, COMMIT_PAGE_SIZE),
           window.launcher.listBackups(root),
           window.launcher.getBackupsDir(root)
         ])
         setState(v)
         setGit(g)
-        setCommits(c)
+        setCommits(c.commits)
+        setCommitTotal(c.total)
         setBackups(b)
         setBackupsDir(d)
         setListError(null)
@@ -143,9 +154,45 @@ export default function Versions(): React.JSX.Element {
     [root]
   )
 
+  const loadMoreCommits = useCallback(async (): Promise<void> => {
+    if (
+      !root ||
+      busy ||
+      listFilter !== 'all' ||
+      loadingMoreRef.current ||
+      commits.length >= commitTotal
+    ) {
+      return
+    }
+
+    const requestId = commitRequestRef.current
+    const offset = commits.length
+    loadingMoreRef.current = true
+    setMoreLoading(true)
+    try {
+      const page = await window.launcher.listCommits(root, offset, COMMIT_PAGE_SIZE)
+      if (requestId !== commitRequestRef.current) return
+      setCommits((current) => (current.length === offset ? [...current, ...page.commits] : current))
+      setCommitTotal(page.total)
+    } catch (err) {
+      if (requestId === commitRequestRef.current) {
+        setListError(err instanceof Error ? err.message : String(err))
+      }
+    } finally {
+      if (requestId === commitRequestRef.current) {
+        loadingMoreRef.current = false
+        setMoreLoading(false)
+      }
+    }
+  }, [root, busy, listFilter, commits.length, commitTotal])
+
   useEffect(() => {
     void refreshAll(false)
   }, [refreshAll])
+
+  useEffect(() => {
+    listScrollRef.current?.scrollTo({ top: 0 })
+  }, [query, listFilter])
 
   /* 任务结束后自动刷新（用 ref 去重，避免重复触发） */
   const activeJob = useMemo(
@@ -158,8 +205,6 @@ export default function Versions(): React.JSX.Element {
     if (!activeJob || activeJob.status === 'running') return
     if (handledRef.current === activeJob.id) return
     handledRef.current = activeJob.id
-    if (activeJob.status === 'failed') setLastResult(null)
-
     // 版本切换会改掉 comfyui_version.py，必须重算环境，否则标题栏与总览页仍是旧版本号
     void refreshEnv()
     // 换版本后 torch/CUDA 可能变了，顺手重探一次运行时
@@ -208,8 +253,8 @@ export default function Versions(): React.JSX.Element {
     }))
   }, [commits, state, query, listFilter, releaseTags])
 
-  const listTotal = listFilter === 'release' ? releaseTags.length : commits.length
-  const listUnit = listFilter === 'release' ? '个版本' : '个提交'
+  const listSummary =
+    listFilter === 'release' ? `共 ${releaseTags.length} 个版本` : `共 ${commitTotal} 个提交`
 
   /*
    * 是否最新只看 git 谱系（state.release），不看 comfyui_version.py ——
@@ -285,7 +330,6 @@ export default function Versions(): React.JSX.Element {
       setPlan({ ...p, ...display })
       setOptBackup(p.willBackup)
     } catch (err) {
-      setLastResult(null)
       alert(err instanceof Error ? err.message : String(err))
     } finally {
       setPlanning(null)
@@ -297,7 +341,6 @@ export default function Versions(): React.JSX.Element {
     const target = plan.target
     const kind = plan.refKind
     setPlan(null)
-    setLastResult(null)
     handledRef.current = null
 
     const res = await window.launcher.switchVersion(
@@ -307,12 +350,7 @@ export default function Versions(): React.JSX.Element {
       root
     )
     setActiveJobId(res.jobId)
-    if (res.ok) {
-      setLastResult(res.value)
-      setTab('log')
-    } else {
-      pushToast(`切换失败：${res.error}`, 'error')
-    }
+    if (!res.ok) pushToast(`切换失败：${res.error}`, 'error')
     handledRef.current = null
   }
 
@@ -504,13 +542,12 @@ export default function Versions(): React.JSX.Element {
         flush
         fill
         title={
-          <Segmented<'list' | 'backup' | 'log'>
+          <Segmented<'list' | 'backup'>
             value={tab}
             onChange={setTab}
             options={[
               { value: 'list', label: '版本列表' },
-              { value: 'backup', label: `版本备份 ${backups.length}` },
-              { value: 'log', label: '更新日志' }
+              { value: 'backup', label: `版本备份 ${backups.length}` }
             ]}
           />
         }
@@ -521,16 +558,14 @@ export default function Versions(): React.JSX.Element {
                 {/* 只有首次加载（还没有数据）才显示加载文案，刷新时保持原内容不动 */}
                 {listLoading && commits.length === 0
                   ? '正在读取本地历史…'
-                  : rows.length === listTotal
-                    ? `共 ${listTotal} ${listUnit}`
-                    : `筛出 ${rows.length} / ${listTotal} ${listUnit}`}
+                  : listSummary}
               </span>
               <button
                 type="button"
                 className="btn btn--sm"
                 onClick={() => void refreshAll(true)}
                 disabled={busy}
-                title="重新读取版本状态，并联网检查远端版本与更新"
+                title="联网更新发版 tag 和 master 完整提交历史，并刷新版本列表"
               >
                 {busy ? <Spinner /> : <Icon icon={RefreshCw} size={13} />}
                 刷新
@@ -561,7 +596,7 @@ export default function Versions(): React.JSX.Element {
           <input
             className="input"
             style={{ maxWidth: 200, fontFamily: 'var(--font-ui)' }}
-            placeholder="搜索版本号…"
+            placeholder={listFilter === 'all' ? '搜索已加载提交…' : '搜索发版版本…'}
             value={query}
             spellCheck={false}
             onChange={(e) => setQuery(e.target.value)}
@@ -575,11 +610,15 @@ export default function Versions(): React.JSX.Element {
             <option value="release">发版版本</option>
             <option value="all">全部提交</option>
           </select>
-          {rows.length !== commits.length && (
-            <span className="dim" style={{ fontSize: 'var(--fs-xs)' }}>
-              筛出 {rows.length} 个
-            </span>
-          )}
+          <button
+            type="button"
+            className="btn btn--sm"
+            onClick={() => void doSyncDeps()}
+            disabled={running || busy}
+          >
+            <Icon icon={Download} size={13} />
+            同步 Python 依赖
+          </button>
         </div>
 
         {listError && (
@@ -591,18 +630,47 @@ export default function Versions(): React.JSX.Element {
         )}
 
         {rows.length === 0 ? (
-          <Empty
-            title={query ? '没有匹配的版本' : listFilter === 'release' ? '本地没有可读的发版版本' : '本地没有可读的提交历史'}
-            hint={
-              query
-                ? '换个关键字，或把范围切回「全部提交」试试。'
-                : listFilter === 'release'
-                  ? '本地没有形如 vX.Y.Z 的 tag。浅克隆下 tag 需要先浅取到本地，才会出现在这里。'
-                  : '列表来自本地 git 历史；点击刷新会补齐 master 完整历史，离线时显示本地已有记录。'
-            }
-          />
+          <div>
+            <Empty
+              title={query ? '没有匹配的版本' : listFilter === 'release' ? '本地没有可读的发版版本' : '本地没有可读的提交历史'}
+              hint={
+                query
+                  ? listFilter === 'all' && commits.length < commitTotal
+                    ? '当前已加载的提交中没有匹配项；继续加载更早提交后还可以接着搜索。'
+                    : '换个关键字，或把范围切回「全部提交」试试。'
+                  : listFilter === 'release'
+                    ? '本地没有形如 vX.Y.Z 的 tag。浅克隆下 tag 需要先浅取到本地，才会出现在这里。'
+                    : '列表来自本地 git 历史；刷新会同步 master 完整历史。'
+              }
+            />
+            {listFilter === 'all' && commits.length < commitTotal && (
+              <div style={{ padding: '0 var(--sp-3) var(--sp-3)' }}>
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  disabled={moreLoading || busy}
+                  onClick={() => void loadMoreCommits()}
+                >
+                  {moreLoading ? <Spinner /> : null}
+                  {query.trim()
+                    ? '继续加载更早提交'
+                    : `加载后续 ${Math.min(COMMIT_PAGE_SIZE, commitTotal - commits.length)} 条`}
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
-          <div className="table-wrap">
+          <div
+            className="table-wrap"
+            ref={listScrollRef}
+            onScroll={(event) => {
+              if (listFilter !== 'all' || commits.length >= commitTotal) return
+              const el = event.currentTarget
+              if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
+                void loadMoreCommits()
+              }
+            }}
+          >
             <table className="table">
               <thead>
                 <tr>
@@ -649,6 +717,21 @@ export default function Versions(): React.JSX.Element {
                     </td>
                   </tr>
                 ))}
+                {listFilter === 'all' && commits.length < commitTotal && (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', padding: 'var(--sp-3)' }}>
+                      <button
+                        type="button"
+                        className="btn btn--sm"
+                        disabled={moreLoading || busy}
+                        onClick={() => void loadMoreCommits()}
+                      >
+                        {moreLoading ? <Spinner /> : null}
+                        加载后续 {Math.min(COMMIT_PAGE_SIZE, commitTotal - commits.length)} 条
+                      </button>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -725,60 +808,6 @@ export default function Versions(): React.JSX.Element {
                 </tbody>
               </table>
             </div>
-          ))}
-        {tab === 'log' &&
-          (lastResult ? (
-            <div style={{ padding: 'var(--sp-3)' }}>
-              <div className="kv" style={{ marginBottom: 'var(--sp-3)' }}>
-                <span className="kv__k">版本变化</span>
-                <span className="kv__v">
-                  {lastResult.fromRef ?? '—'} → {lastResult.toTag ?? lastResult.toCommit.slice(0, 8)}
-                </span>
-                <span className="kv__k">备份</span>
-                <span className="kv__v">{lastResult.backupId ?? '（未创建）'}</span>
-                <span className="kv__k">工作区</span>
-                <span className="kv__v">{lastResult.stashed ? '已 stash 保存' : '无需 stash'}</span>
-                <span className="kv__k">代码变更</span>
-                <span className="kv__v">
-                  {lastResult.changeSummary
-                    ? `${lastResult.changeSummary.filesChanged} 个文件 · +${lastResult.changeSummary.insertions} / -${lastResult.changeSummary.deletions}`
-                    : '无差异'}
-                </span>
-              </div>
-
-              {lastResult.requirementsDiff && <DiffView diff={lastResult.requirementsDiff} />}
-
-              {lastResult.commits.length > 0 && (
-                <>
-                  <div className="section-title">区间提交（{lastResult.commits.length}）</div>
-                  <div className="commit-list">
-                    {lastResult.commits.map((c, i) => (
-                      <div key={i}>{c}</div>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              <div className="row" style={{ marginTop: 'var(--sp-3)', gap: 'var(--sp-2)' }}>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => void doSyncDeps()}
-                  disabled={running}
-                >
-                  <Icon icon={Download} size={14} />
-                  同步 Python 依赖
-                </button>
-                <button type="button" className="btn" onClick={() => setTab('list')}>
-                  返回列表
-                </button>
-              </div>
-            </div>
-          ) : (
-            <Empty
-              title="还没有切换结果"
-              hint="切换版本之后，版本变化、依赖差异和区间提交会显示在这里。"
-            />
           ))}
       </Panel>
 
@@ -932,7 +961,7 @@ function DepSyncNote({ diff }: { diff: SwitchPlan['requirementsDiff'] }): React.
   if (!diff) {
     return (
       <span className="field__hint">
-        两侧缺少 requirements.txt 无法比对；切换后如有需要，可在下方点「同步 Python 依赖」。
+        两侧缺少 requirements.txt 无法比对；如有需要，可在版本列表工具栏点「同步 Python 依赖」。
       </span>
     )
   }

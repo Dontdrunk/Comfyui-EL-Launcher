@@ -4,7 +4,7 @@ import type {
   AppSettings,
   BackupDetail,
   BackupSnapshot,
-  CommitInfo,
+  CommitPage,
   DiskProbe,
   EnvBackupFile,
   EnvLayout,
@@ -80,7 +80,8 @@ const api: LauncherApi = {
   getVersionState: (root) => ipcRenderer.invoke(IPC.versionState, root) as Promise<VersionState>,
   listRemoteTags: (root) =>
     ipcRenderer.invoke(IPC.versionRemoteTags, root) as Promise<{ name: string; commit: string }[]>,
-  listCommits: (root) => ipcRenderer.invoke(IPC.versionCommits, root) as Promise<CommitInfo[]>,
+  listCommits: (root, offset, limit) =>
+    ipcRenderer.invoke(IPC.versionCommits, root, offset, limit) as Promise<CommitPage>,
   fetchRemote: (root) =>
     ipcRenderer.invoke(IPC.versionFetchRemote, root) as Promise<{ ok: boolean; error: string | null }>,
   checkUpdate: (root, force) =>
