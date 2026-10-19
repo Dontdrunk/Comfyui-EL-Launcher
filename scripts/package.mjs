@@ -10,7 +10,7 @@
  */
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { readFileSync, statSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -41,8 +41,10 @@ const child = spawn(
 function includePortable(dir) {
   const ymlPath = join(dir, 'latest.yml')
   const text = readFileSync(ymlPath, 'utf8')
-  const portable = readdirSync(dir).find((name) => name.endsWith('-portable.exe'))
-  if (!portable || text.includes(portable)) return
+  const version = text.match(/^version:\s*(\S+)/m)?.[1]
+  if (!version) return
+  const portable = `ExplorerLauncher-${version}-portable.exe`
+  if (text.includes(portable)) return
   const file = join(dir, portable)
   const sha512 = createHash('sha512').update(readFileSync(file)).digest('base64')
   const size = statSync(file).size
