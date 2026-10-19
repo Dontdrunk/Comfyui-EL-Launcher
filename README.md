@@ -1,5 +1,11 @@
 # 探索者启动器
 
+<p align="center">
+  <a href="docs/explorer-launcher-demo.mp4">
+    <img src="docs/explorer-launcher-demo.gif" alt="探索者启动器产品演示，点击查看完整视频" width="800">
+  </a>
+</p>
+
 [![Latest release](https://img.shields.io/github/v/release/Dontdrunk/Comfyui-EL-Launcher?label=Release)](https://github.com/Dontdrunk/Comfyui-EL-Launcher/releases/latest)
 
 面向 **ComfyUI 官方 Windows 便携版** 的桌面启动与管理工具。可在一个界面中启动 ComfyUI、管理版本和插件，并查看模型目录。
