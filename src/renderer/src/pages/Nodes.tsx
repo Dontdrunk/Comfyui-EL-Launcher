@@ -3,6 +3,7 @@ import type {
   InstallResult,
   InstalledNode,
   NodeDepsDetail,
+  NodeDepsReport,
   NodeReleases,
   NodeUpdateInfo,
   RegistryNode,
@@ -22,6 +23,7 @@ import {
   Switch,
   Tag
 } from '../components/ui'
+import { depDot } from '@shared/depStatus.mjs'
 import { formatDateTime } from '../lib/format'
 import { useApp } from '../store'
 
@@ -49,6 +51,10 @@ export default function Nodes(): React.JSX.Element {
   const [installed, setInstalled] = useState<InstalledNode[]>([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState('')
+
+  /** 全量依赖检查结果：给「依赖」列的状态圆点用（单次 python 调用，12 个插件约 1 秒） */
+  const [depsReport, setDepsReport] = useState<NodeDepsReport | null>(null)
+  const [depsLoading, setDepsLoading] = useState(false)
 
   const [updates, setUpdates] = useState<Record<string, NodeUpdateInfo>>({})
   const [updating, setUpdating] = useState(false)
@@ -114,6 +120,46 @@ export default function Nodes(): React.JSX.Element {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  /*
+   * 依赖状态圆点：进入页面（以及每次装/卸/更新插件之后）跑一次全量检查。
+   * 单个插件的悬停浮层仍然走 nodeDepsDetail，这里只负责「一眼看出有没有缺」。
+   */
+  const checkDeps = useCallback(async (): Promise<void> => {
+    if (!root) return
+    setDepsLoading(true)
+    try {
+      setDepsReport(await window.launcher.checkNodeDeps(root))
+    } catch (err) {
+      setDepsReport({
+        checkedAt: Date.now(),
+        entries: [],
+        totalMissing: 0,
+        pythonPackageCount: 0,
+        error: err instanceof Error ? err.message : String(err)
+      })
+    } finally {
+      setDepsLoading(false)
+    }
+  }, [root])
+
+  useEffect(() => {
+    if (!root || installed.length === 0) return
+    void checkDeps()
+  }, [root, installed, checkDeps])
+
+  /** dirName → 该插件的依赖总数 / 缺失数 */
+  const depSummary = useMemo(() => {
+    const map = new Map<string, { total: number; missing: number; error: string | null }>()
+    for (const e of depsReport?.entries ?? []) {
+      map.set(e.dirName, {
+        total: e.requirements.length,
+        missing: e.missing.length,
+        error: e.error
+      })
+    }
+    return map
+  }, [depsReport])
 
   const activeJob = useMemo(
     () => jobs.find((j) => j.id === activeJobId) ?? null,
@@ -576,7 +622,21 @@ export default function Nodes(): React.JSX.Element {
                         />
                       </div>
                     </th>
-                    <th style={{ width: 90 }}>依赖</th>
+                    <th
+                      style={{ width: 90 }}
+                      title={
+                        depsLoading
+                          ? '正在检查依赖…'
+                          : depsReport
+                            ? `依赖状态检查于 ${formatDateTime(depsReport.checkedAt)}` +
+                              (depsReport.totalMissing > 0
+                                ? `，共缺 ${depsReport.totalMissing} 个包`
+                                : '，没有缺失')
+                            : '依赖状态未检查'
+                      }
+                    >
+                      依赖
+                    </th>
                     <th>远程地址</th>
                     <th style={{ width: 100 }}>版本ID</th>
                     <th style={{ width: 170 }}>更新时间</th>
@@ -621,7 +681,14 @@ export default function Nodes(): React.JSX.Element {
                           )}
                         </td>
                         <td>
-                          {root && <DepCell node={n} root={root} />}
+                          {root && (
+                            <DepCell
+                              node={n}
+                              root={root}
+                              summary={depSummary.get(n.dirName)}
+                              onDepsChanged={() => void checkDeps()}
+                            />
+                          )}
                         </td>
                         <td>
                           <span
@@ -1018,7 +1085,19 @@ function NodeVersionMark({
 
 /* ── 依赖单元格：悬停出浮层，逐项状态 + 单项安装/重装 ── */
 
-function DepCell({ node, root }: { node: InstalledNode; root: string }): React.JSX.Element {
+function DepCell({
+  node,
+  root,
+  summary,
+  onDepsChanged
+}: {
+  node: InstalledNode
+  root: string
+  /** 全量检查得到的该插件摘要；null 表示还没拿到 */
+  summary?: { total: number; missing: number; error: string | null }
+  /** 单项依赖装完后刷新整行状态 */
+  onDepsChanged?: () => void
+}): React.JSX.Element {
   const pushToast = useApp((s) => s.pushToast)
   const [detail, setDetail] = useState<NodeDepsDetail | null>(null)
   const [loading, setLoading] = useState(false)
@@ -1064,35 +1143,39 @@ function DepCell({ node, root }: { node: InstalledNode; root: string }): React.J
       }
       pushToast(`依赖 ${name} 安装完成`)
       await load(true)
+      onDepsChanged?.()
     } finally {
       setBusy(null)
     }
   }
 
-  const missing = detail?.entries.filter((e) => !e.installed).length ?? 0
-  const tone = !detail || detail.error ? '' : missing > 0 ? ' rowlink--danger' : ''
+  /* 浮层没打开时也要能报「缺几个」——用全量检查的摘要，别等悬停 */
+  const missing = detail && !detail.error ? detail.entries.filter((e) => !e.installed).length : (summary?.missing ?? 0)
+  const totalCount = detail && !detail.error ? detail.entries.length : (summary?.total ?? node.requirementsCount)
+  const textTone = missing > 0 ? ' rowlink--danger' : ''
+
+  const dot = depDot(node.hasRequirements, summary)
 
   return (
     <>
       <button
         type="button"
-        className={`rowlink${tone}`}
-        title={node.hasRequirements ? '悬停查看依赖明细' : '没有 requirements.txt'}
+        className={`rowlink rowlink--dep${textTone}`}
+        title={dot ? `${dot.hint} · 悬停查看明细` : '没有 requirements.txt'}
         onMouseEnter={(e) => open(e.currentTarget)}
         onMouseLeave={scheduleClose}
         onClick={(e) => open(e.currentTarget)}
       >
+        {dot && <span className={`depdot depdot--${dot.tone}`} aria-hidden />}
         {!node.hasRequirements
           ? '无'
           : loading
             ? '…'
-            : !detail
-              ? `${node.requirementsCount} 项`
-              : detail.error
-                ? '查看'
-                : missing > 0
-                  ? `缺 ${missing}`
-                  : `${detail.entries.length} 项`}
+            : detail?.error
+              ? '查看'
+              : missing > 0
+                ? `缺 ${missing}`
+                : `${totalCount} 项`}
       </button>
 
       {anchor && detail && (

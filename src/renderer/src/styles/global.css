@@ -292,6 +292,43 @@ body {
   background: var(--warn);
 }
 
+/*
+ * 「依赖」列的状态圆点：
+ *   绿 = 声明的依赖全都装好了（含没有 requirements.txt 的插件不显示圆点）
+ *   黄 = 部分缺失
+ *   红 = 声明的依赖一个都没装上
+ *   灰 = 还没检查完 / 检查失败 / 未声明依赖
+ */
+.rowlink--dep {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.depdot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+  opacity: 0.6;
+}
+
+.depdot--ok {
+  background: var(--ok);
+  opacity: 1;
+}
+
+.depdot--warn {
+  background: var(--warn);
+  opacity: 1;
+}
+
+.depdot--error {
+  background: var(--danger);
+  opacity: 1;
+}
+
 .deppop__err {
   padding: var(--sp-2) var(--sp-3);
   color: var(--warn-text);
