@@ -694,6 +694,7 @@ export interface LauncherApi {
   /* ---- 系统交互 ---- */
   windowMinimize(): Promise<void>
   windowMaximize(): Promise<boolean>
+  /** 关闭窗口：只收进托盘，进程与 ComfyUI 继续运行（退出走托盘菜单） */
   windowClose(): Promise<void>
   isWindowMaximized(): Promise<boolean>
 

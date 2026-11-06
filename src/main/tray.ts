@@ -130,11 +130,13 @@ async function promoteUntilRegistered(): Promise<boolean> {
  * 桌面右下角托盘图标。右键菜单三项：打开、设置、退出。
  * 左键单击等同于「打开」。
  */
-export function createTray(next: TrayActions): void {
+export function createTray(next: TrayActions): boolean {
   stopped = false
   actions = next
   installTrayMenu(() => actions)
-  if (!mount(next)) return
+  // 返回 false 时调用方要让「关闭窗口」继续等于「退出进程」，
+  // 否则用户既没有托盘菜单，也关不掉程序。
+  if (!mount(next)) return false
 
   void promoteUntilRegistered().then((changed) => {
     if (!changed || stopped || !actions) return
@@ -143,6 +145,7 @@ export function createTray(next: TrayActions): void {
     mount(actions)
     logToFile('托盘图标已显示在任务栏右下角')
   })
+  return true
 }
 
 export function destroyTray(): void {

@@ -102,8 +102,8 @@ export function TitleBar(): React.JSX.Element {
           id="closewin"
           className="is-danger"
           onClick={() => void window.launcher.windowClose()}
-          title="关闭"
-          aria-label="关闭"
+          title="关闭窗口（程序在托盘继续运行）"
+          aria-label="关闭窗口（程序在托盘继续运行）"
         >
           <Icon icon={X} size={15} />
         </button>
