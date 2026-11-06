@@ -146,6 +146,16 @@ export interface JobEvent {
 
 export type ServiceState = 'stopped' | 'launching' | 'running' | 'stopping' | 'error'
 
+/** 端口被占用时，占着它的那个进程 */
+export interface PortOwner {
+  pid: number
+  name: string
+  /** 拿不到命令行时为 null（这种情况下不自动接管） */
+  commandLine: string | null
+  /** 命令行指向当前 comfyRoot 这套 ComfyUI */
+  isOurComfy: boolean
+}
+
 export interface ServiceStatus {
   state: ServiceState
   pid: number | null
@@ -162,6 +172,12 @@ export interface ServiceStatus {
   lastError: string | null
   /** 启动耗时（ms），就绪后填充 */
   bootMs: number | null
+  /** 进程不是本次启动的，而是接管了遗留/外部启动的 ComfyUI */
+  external: boolean
+  /** 端口冲突时记录占用者，供 UI 展示与「结束并启动」 */
+  portOwner: PortOwner | null
+  /** 端口上已经有一个能响应的 ComfyUI（/system_stats 探通） */
+  portLive: boolean
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -409,12 +425,18 @@ export interface RegistryNode {
 }
 
 export interface RegistrySearchResult {
+  /** 当前页数据（关键字搜索时已按名称过滤） */
   nodes: RegistryNode[]
+  /** 名称命中的总条数（关键字搜索）；热门列表则是 Registry 的总数 */
   total: number
   page: number
   pageSize: number
   totalPages: number
   error: string | null
+  /** 关键字搜索：Registry 全文命中的总条数（含描述/标签命中） */
+  sourceTotal?: number
+  /** 关键字搜索：实际扫描过的条数；小于 sourceTotal 说明只看了前几页 */
+  scanned?: number
 }
 
 export interface InstallResult {
@@ -608,6 +630,8 @@ export interface LauncherApi {
   getServiceStatus(): Promise<ServiceStatus>
   startService(override?: Partial<LaunchDefaults>): Promise<ServiceStatus>
   stopService(): Promise<ServiceStatus>
+  /** 结束占着服务端口的进程（端口冲突时由用户确认后调用） */
+  killPortOwner(): Promise<ServiceStatus>
   getServiceLogs(): Promise<LogLine[]>
   clearServiceLogs(): Promise<void>
 

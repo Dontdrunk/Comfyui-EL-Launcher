@@ -102,6 +102,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   )
 
   ipcMain.handle(IPC.serviceStop, async (): Promise<ServiceStatus> => serviceManager.stop())
+  ipcMain.handle(IPC.serviceKillPortOwner, async (): Promise<ServiceStatus> =>
+    serviceManager.killPortOwner()
+  )
   ipcMain.handle(IPC.serviceLogs, async () => serviceManager.getLogs())
   ipcMain.handle(IPC.serviceLogsClear, async () => {
     serviceManager.clearLogs()

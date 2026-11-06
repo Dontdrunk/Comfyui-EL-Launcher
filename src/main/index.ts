@@ -117,6 +117,9 @@ if (!gotLock) {
         quit: () => app.quit()
       })
 
+      // 上次启动器被强杀时 ComfyUI 会剩下来继续占着端口：能接管就直接接管
+      void serviceManager.adoptExisting()
+
       installCaptureHook(win, () => app.quit())
 
       app.on('activate', () => {

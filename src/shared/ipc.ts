@@ -17,6 +17,7 @@ export const IPC = {
   serviceStatus: 'service:status',
   serviceStart: 'service:start',
   serviceStop: 'service:stop',
+  serviceKillPortOwner: 'service:killPortOwner',
   serviceLogs: 'service:logs',
   serviceLogsClear: 'service:logsClear',
 

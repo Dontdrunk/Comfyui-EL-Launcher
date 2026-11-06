@@ -67,6 +67,7 @@ const api: LauncherApi = {
   startService: (override?: Partial<LaunchDefaults>) =>
     ipcRenderer.invoke(IPC.serviceStart, override) as Promise<ServiceStatus>,
   stopService: () => ipcRenderer.invoke(IPC.serviceStop) as Promise<ServiceStatus>,
+  killPortOwner: () => ipcRenderer.invoke(IPC.serviceKillPortOwner) as Promise<ServiceStatus>,
   getServiceLogs: () => ipcRenderer.invoke(IPC.serviceLogs) as Promise<LogLine[]>,
   clearServiceLogs: () => ipcRenderer.invoke(IPC.serviceLogsClear) as Promise<void>,
 

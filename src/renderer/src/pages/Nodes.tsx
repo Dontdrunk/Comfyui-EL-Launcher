@@ -680,7 +680,7 @@ export default function Nodes(): React.JSX.Element {
                 <input
                   className="input"
                   style={{ fontFamily: 'var(--font-ui)' }}
-                  placeholder="搜索 ComfyUI Registry（例如 impact、video、upscale）…"
+                  placeholder="按插件名称搜索 ComfyUI Registry（例如 impact、md、video）…"
                   value={regQuery}
                   spellCheck={false}
                   onChange={(e) => {
@@ -707,7 +707,10 @@ export default function Nodes(): React.JSX.Element {
                   <Progress percent={null} />
                 </div>
               ) : !regResult || regResult.nodes.length === 0 ? (
-                <Empty title="没有结果" hint="换个关键字试试，或检查网络与代理设置。" />
+                <Empty
+                  title="没有名称匹配的插件"
+                  hint="现在只按插件名称与仓库名匹配，描述里的关键词不再算命中；换个关键字试试，或检查网络与代理设置。"
+                />
               ) : (
               <div className="plugin-grid" ref={gridRef}>
                 {regResult.nodes.map((node) => (
@@ -727,7 +730,12 @@ export default function Nodes(): React.JSX.Element {
             {regResult && regResult.nodes.length > 0 && (
               <div className="plugin-pager">
                 <span className="plugin-pager__total">
-                  共 {regResult.total.toLocaleString()} 个插件 · 每页 {regResult.pageSize} 条
+                  共 {regResult.total.toLocaleString()} 个名称匹配 · 每页 {regResult.pageSize} 条
+                  {regResult.sourceTotal !== undefined &&
+                  regResult.scanned !== undefined &&
+                  regResult.scanned < regResult.sourceTotal
+                    ? `（Registry 全文命中 ${regResult.sourceTotal} 条，已扫描前 ${regResult.scanned} 条）`
+                    : null}
                 </span>
                 <div className="plugin-pager__nav">
                   <button

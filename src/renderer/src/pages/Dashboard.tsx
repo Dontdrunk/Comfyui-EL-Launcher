@@ -6,6 +6,7 @@ import { Icon } from '../components/Icon'
 import { BannerBackdrop } from '../components/BannerBackdrop'
 import {
   Empty,
+  Modal,
   Notice,
   Panel,
   Progress,
@@ -40,6 +41,8 @@ export default function Dashboard(): React.JSX.Element {
   const [actionError, setActionError] = useState<string | null>(null)
   const [selfUpdate, setSelfUpdate] = useState<SelfUpdateStatus | null>(null)
   const [updatePercent, setUpdatePercent] = useState<number | null>(null)
+  const [killConfirm, setKillConfirm] = useState(false)
+  const [killing, setKilling] = useState(false)
 
   useEffect(() => {
     if (settings) setForm(settings.launch)
@@ -94,6 +97,21 @@ export default function Dashboard(): React.JSX.Element {
       setActionError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
+    }
+  }
+
+  /** 端口被别人占着：确认后结束它，再正常启动 */
+  const onReclaim = async (): Promise<void> => {
+    setKilling(true)
+    setActionError(null)
+    try {
+      await window.launcher.killPortOwner()
+      setKillConfirm(false)
+      await onStart()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setKilling(false)
     }
   }
 
@@ -174,9 +192,9 @@ export default function Dashboard(): React.JSX.Element {
         <Readout
           label="服务端口"
           value={String(form?.port ?? 8188)}
-          hint={service?.ready ? '已监听' : '未监听'}
+          hint={service?.external ? '接管中' : service?.ready ? '已监听' : '未监听'}
           mono
-          tone={service?.ready ? 'ok' : 'none'}
+          tone={service?.external ? 'warn' : service?.ready ? 'ok' : 'none'}
         />
         <Readout
           label="软件版本"
@@ -194,10 +212,50 @@ export default function Dashboard(): React.JSX.Element {
               </Notice>
             </div>
           )}
-          {service?.lastError && !actionError && (
+          {/* 端口被占：说清是谁占着，并给出两个可点的动作（接管成功时不算冲突） */}
+          {service?.portOwner && state === 'error' && (
+            <div style={{ marginBottom: 'var(--sp-3)' }}>
+              <Notice tone="error" title="端口被占用">
+                {service.lastError}
+              </Notice>
+              <div className="actionbar" style={{ marginTop: 'var(--sp-2)' }}>
+                {service.portLive && (
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    onClick={() =>
+                      void window.launcher.openExternal(`http://127.0.0.1:${service.port}`)
+                    }
+                  >
+                    <Icon icon={ExternalLink} size={15} />
+                    打开现有服务
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn--sm btn--danger"
+                  disabled={busy || killing}
+                  onClick={() => setKillConfirm(true)}
+                >
+                  结束占用进程并启动
+                </button>
+              </div>
+            </div>
+          )}
+
+          {service?.lastError && !actionError && (!service?.portOwner || state !== 'error') && (
             <div style={{ marginBottom: 'var(--sp-3)' }}>
               <Notice tone="error" title="服务异常">
                 {service.lastError}
+              </Notice>
+            </div>
+          )}
+
+          {service?.external && (
+            <div style={{ marginBottom: 'var(--sp-3)' }}>
+              <Notice tone="info" title="已接管正在运行的 ComfyUI">
+                这是上次启动器异常退出时留下的进程（PID {service.pid}），现在由启动器接管：
+                点下面的「停止 ComfyUI」可以直接结束它；退出启动器不会动它。
               </Notice>
             </div>
           )}
@@ -281,6 +339,52 @@ export default function Dashboard(): React.JSX.Element {
             </div>
           </div>
       </Panel>
+
+      {/* ══════════ 结束占用进程确认 ══════════ */}
+      {killConfirm && service?.portOwner && state === 'error' && (
+        <Modal
+          title="结束占用端口的进程"
+          subtitle={`${service.portOwner.name} · PID ${service.portOwner.pid}`}
+          onClose={() => setKillConfirm(false)}
+          width={640}
+          footer={
+            <>
+              <button type="button" className="btn" onClick={() => setKillConfirm(false)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="btn btn--danger"
+                disabled={killing}
+                onClick={() => void onReclaim()}
+              >
+                {killing ? '正在结束…' : '结束并启动'}
+              </button>
+            </>
+          }
+        >
+          <Notice tone="warn" title="会强制结束该进程及其子进程">
+            结束后启动器会立刻用当前设置重新启动 ComfyUI。如果它其实是被别的程序占用的端口，
+            请先确认那是什么进程。
+          </Notice>
+          <div className="kv" style={{ marginTop: 'var(--sp-3)' }}>
+            <span className="kv__k">进程</span>
+            <span className="kv__v">{service.portOwner.name}</span>
+            <span className="kv__k">PID</span>
+            <span className="kv__v">{service.portOwner.pid}</span>
+            <span className="kv__k">端口</span>
+            <span className="kv__v">{service.port}</span>
+          </div>
+          {service.portOwner.commandLine && (
+            <div style={{ marginTop: 'var(--sp-3)' }}>
+              <span className="field__label">命令行</span>
+              <div className="mono" style={{ fontSize: 'var(--fs-xs)', wordBreak: 'break-all' }}>
+                {service.portOwner.commandLine}
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
 
       {!env?.valid && !envLoading && (
         <>
