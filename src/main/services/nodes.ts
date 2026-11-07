@@ -77,7 +77,6 @@ export async function listInstalledNodes(root: string): Promise<InstalledNode[]>
       subject: info.subject,
       branch: info.branch,
       detached: info.detached,
-      dirty: info.dirty,
       hasRequirements: requirements.length > 0,
       requirementsCount: requirements.length,
       displayName: manifest.displayName ?? d.baseName,

@@ -388,7 +388,6 @@ export interface InstalledNode {
   subject: string | null
   branch: string | null
   detached: boolean
-  dirty: boolean
   hasRequirements: boolean
   requirementsCount: number
   /** 从 pyproject.toml / registry id 推断 */

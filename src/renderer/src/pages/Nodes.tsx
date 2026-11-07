@@ -680,14 +680,6 @@ export default function Nodes(): React.JSX.Element {
                             <strong className="ellipsis" title={n.baseName}>
                               {n.displayName ?? n.baseName}
                             </strong>
-                            {n.dirty && (
-                              <Tag
-                                tone="warn"
-                                title="插件目录里有未提交的改动（例如运行时写出的 config.json）。更新或切换版本时会自动 git stash 保存，不会丢。"
-                              >
-                                本地改动
-                              </Tag>
-                            )}
                           </div>
                           {n.displayName && (
                             <div className="mono dim ellipsis" style={{ fontSize: 'var(--fs-xs)' }}>
