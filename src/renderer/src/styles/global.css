@@ -213,6 +213,14 @@ body {
   color: var(--danger-text);
 }
 
+/* 「未比对」不是可点的动作，只是一句状态：用弱化色 + 问号光标 */
+.rowlink--unknown {
+  color: var(--fg-muted);
+  font-size: var(--fs-xs);
+  cursor: help;
+  white-space: nowrap;
+}
+
 /* 表头里的搜索框：压到和表头文字同一行高度 */
 .table__search {
   display: flex;

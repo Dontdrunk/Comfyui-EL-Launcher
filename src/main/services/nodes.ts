@@ -102,6 +102,14 @@ function sameCommit(local: string, remote: string): boolean {
   return a === b || a.startsWith(b) || b.startsWith(a)
 }
 
+/** 读远端 HEAD；网络抖动时重试一次，别让一次 reset 把整行变成空白 */
+async function remoteHead(dir: string): Promise<{ code: number | null; stdout: string }> {
+  const first = await gitRaw(dir, ['ls-remote', 'origin', 'HEAD'], { timeoutMs: 12_000 })
+  if (first.code === 0) return first
+  await new Promise((r) => setTimeout(r, 1200))
+  return gitRaw(dir, ['ls-remote', 'origin', 'HEAD'], { timeoutMs: 30_000 })
+}
+
 /** 并发受限地检查每个插件的远端 HEAD 是否领先于本地 */
 export async function checkNodeUpdates(root: string): Promise<NodeUpdateInfo[]> {
   const paths = resolveComfyPaths(root)
@@ -119,9 +127,9 @@ export async function checkNodeUpdates(root: string): Promise<NodeUpdateInfo[]> 
     if (!remote) return blank
 
     const local = await gitSoft(d.path, ['rev-parse', 'HEAD'])
-    const r = await gitRaw(d.path, ['ls-remote', 'origin', 'HEAD'], { timeoutMs: 30_000 })
+    const r = await remoteHead(d.path)
     if (r.code !== 0) {
-      return { ...blank, localCommit: local, error: '无法访问远端仓库' }
+      return { ...blank, localCommit: local, error: '无法访问远端仓库（网络或代理问题）' }
     }
     const m = r.stdout.match(/^([0-9a-f]{7,40})\s+HEAD/im)
     const remoteCommit = m ? m[1] : null

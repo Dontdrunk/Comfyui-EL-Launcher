@@ -680,7 +680,14 @@ export default function Nodes(): React.JSX.Element {
                             <strong className="ellipsis" title={n.baseName}>
                               {n.displayName ?? n.baseName}
                             </strong>
-                            {n.dirty && <Tag tone="warn">本地改动</Tag>}
+                            {n.dirty && (
+                              <Tag
+                                tone="warn"
+                                title="插件目录里有未提交的改动（例如运行时写出的 config.json）。更新或切换版本时会自动 git stash 保存，不会丢。"
+                              >
+                                本地改动
+                              </Tag>
+                            )}
                           </div>
                           {n.displayName && (
                             <div className="mono dim ellipsis" style={{ fontSize: 'var(--fs-xs)' }}>
@@ -1069,8 +1076,22 @@ function NodeVersionMark({
   locked: boolean
   onUpdate: () => void
 }): React.JSX.Element | null {
-  const compared = Boolean(info && !info.error && info.localCommit && info.remoteCommit)
-  if (!info || !compared) return null
+  if (!info) return null
+  /* 检查失败/拿不到版本号时别留空：空白会被误读成「没有更新信息」 */
+  if (info.error || !info.localCommit || !info.remoteCommit) {
+    return (
+      <span
+        className="rowlink rowlink--unknown"
+        title={
+          info.error
+            ? `无法比对远端：${info.error}。点右上角「刷新」重试。`
+            : '缺少本地或远端提交号，无法比对'
+        }
+      >
+        未比对
+      </span>
+    )
+  }
   if (!info.hasUpdate) {
     return (
       <button type="button" className="rowlink latest-flag" disabled tabIndex={-1} title="已是最新版本">
