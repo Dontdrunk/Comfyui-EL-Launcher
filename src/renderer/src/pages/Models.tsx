@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DiskProbe, ModelNode, ModelScanReport } from '@shared/types'
 import { ChevronRight, File, Folder, FolderOpen, Search, Trash2 } from 'lucide'
 import { Icon } from '../components/Icon'
-import { Empty, Modal, Notice, Panel, Readout, Readouts } from '../components/ui'
+import { Empty, Modal, Notice, PageLoading, Panel, Readout, Readouts } from '../components/ui'
 import { formatBytes, formatDateTime, formatRelative } from '../lib/format'
 import { useApp } from '../store'
 
@@ -22,12 +22,17 @@ export default function Models(): React.JSX.Element {
   const [probe, setProbe] = useState<DiskProbe | null>(null)
   const [open, setOpen] = useState<Set<string>>(() => new Set())
   const [scanning, setScanning] = useState(false)
+  /** 首次扫描是否已经跑完：没跑完就别渲染「没有可扫描的目录」 */
+  const [scanned, setScanned] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ModelNode | null>(null)
   const [error, setError] = useState<string | null>(null)
   const scanGen = useRef(0)
 
   const runScan = useCallback(async (): Promise<void> => {
-    if (!root) return
+    if (!root) {
+      setScanned(true)
+      return
+    }
     const gen = ++scanGen.current
     setScanning(true)
     setError(null)
@@ -40,7 +45,10 @@ export default function Models(): React.JSX.Element {
       if (gen !== scanGen.current) return
       setError(err instanceof Error ? err.message : String(err))
     } finally {
-      if (gen === scanGen.current) setScanning(false)
+      if (gen === scanGen.current) {
+        setScanning(false)
+        setScanned(true)
+      }
     }
   }, [root])
 
@@ -120,10 +128,14 @@ export default function Models(): React.JSX.Element {
 
       <Panel fill flush title={scanning && !report ? '正在扫描模型目录' : '模型目录'}>
         {!report ? (
-          <Empty
-            title={scanning ? '正在扫描模型目录' : '没有可扫描的目录'}
-            hint={scanning ? '扫完后可以按文件夹逐层查看。' : undefined}
-          />
+          scanning || !scanned ? (
+            <PageLoading
+              label="正在扫描模型目录…"
+              hint="首次检查会统计每个文件夹的体积与文件数。"
+            />
+          ) : (
+            <Empty title="没有可扫描的目录" hint="先到「设置」里指定 ComfyUI 便携版目录。" />
+          )
         ) : report.error ? null : report.entries.length === 0 ? (
           <Empty title="模型目录是空的" hint="models 下面还没有文件夹或模型文件。" />
         ) : (

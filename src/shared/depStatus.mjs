@@ -8,6 +8,26 @@
  */
 
 /**
+ * 指示器的视觉状态。和文案分开是因为「还没检查完」和「检查失败」都要显示成灰点，
+ * 但前者应该转圈、后者不该转。
+ *
+ * @param {boolean} hasRequirements
+ * @param {{ total: number, missing: number, error?: string | null } | null | undefined} summary
+ * @returns {'busy' | 'none' | 'ok' | 'warn' | 'error'}
+ */
+export function depVisualTone(hasRequirements, summary) {
+  if (!hasRequirements) return 'none'
+  if (!summary) return 'busy'
+  if (summary.error) return 'none'
+  const total = Number(summary.total) || 0
+  const missing = Number(summary.missing) || 0
+  if (total === 0) return 'none'
+  if (missing === 0) return 'ok'
+  if (missing >= total) return 'error'
+  return 'warn'
+}
+
+/**
  * @param {boolean} hasRequirements 插件是否声明了 requirements.txt
  * @param {{ total: number, missing: number, error?: string | null } | null | undefined} summary
  * @returns {{ tone: 'idle' | 'ok' | 'warn' | 'error', hint: string } | null} null = 不显示圆点

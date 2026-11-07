@@ -252,6 +252,23 @@ export function Spinner({ label }: { label?: ReactNode }): React.JSX.Element {
   )
 }
 
+/* ── 页面级加载态：各页面首屏未就绪时统一用它，避免先闪一下「空列表」 ── */
+export function PageLoading({
+  label = '加载中…',
+  hint
+}: {
+  label?: string
+  hint?: ReactNode
+}): React.JSX.Element {
+  return (
+    <div className="pageload" role="status" aria-live="polite">
+      <span className="pageload__ring" aria-hidden />
+      <span className="pageload__label">{label}</span>
+      {hint ? <span className="pageload__hint">{hint}</span> : null}
+    </div>
+  )
+}
+
 /* ── 空状态 ── */
 export function Empty({
   icon,

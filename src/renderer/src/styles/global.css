@@ -293,40 +293,85 @@ body {
 }
 
 /*
- * 「依赖」列的状态圆点：
- *   绿 = 声明的依赖全都装好了（含没有 requirements.txt 的插件不显示圆点）
- *   黄 = 部分缺失
- *   红 = 声明的依赖一个都没装上
- *   灰 = 还没检查完 / 检查失败 / 未声明依赖
+ * 「依赖」列的状态指示器：柔和底色 + 高亮内核，四档语义色。
+ *   ok    = 依赖全部就绪
+ *   warn  = 部分缺失
+ *   error = 一个都没装上
+ *   none  = 未声明依赖 / 检查失败（空心，不抢注意力）
+ *   busy  = 正在检查（外圈旋转，和全站其它加载指示器同一套动效）
  */
 .rowlink--dep {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-start;
+  padding: 2px;
+  border-radius: 50%;
 }
 
-.depdot {
-  flex: 0 0 auto;
+.depstatus {
+  --tone: var(--fg-muted);
+  --tone-soft: color-mix(in srgb, var(--fg-muted) 14%, transparent);
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--tone-soft);
+  transition: transform var(--dur-fast);
+}
+
+.depstatus::after {
+  content: '';
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--fg-muted);
-  opacity: 0.6;
+  background: var(--tone);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--tone) 55%, transparent);
 }
 
-.depdot--ok {
-  background: var(--ok);
-  opacity: 1;
+.rowlink--dep:hover .depstatus {
+  transform: scale(1.12);
 }
 
-.depdot--warn {
-  background: var(--warn);
-  opacity: 1;
+.depstatus--ok {
+  --tone: var(--ok);
+  --tone-soft: var(--ok-soft);
 }
 
-.depdot--error {
-  background: var(--danger);
-  opacity: 1;
+.depstatus--warn {
+  --tone: var(--warn);
+  --tone-soft: var(--warn-soft);
+}
+
+.depstatus--error {
+  --tone: var(--danger);
+  --tone-soft: var(--danger-soft);
+}
+
+.depstatus--none {
+  background: transparent;
+}
+
+.depstatus--none::after {
+  background: transparent;
+  border: 1.5px solid color-mix(in srgb, var(--fg-muted) 45%, transparent);
+  box-shadow: none;
+}
+
+.depstatus--busy::after {
+  display: none;
+}
+
+.depstatus--busy::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--fg-muted) 18%, transparent);
+  border-top-color: var(--accent-line);
+  animation: spin 0.8s linear infinite;
 }
 
 .deppop__err {
@@ -1594,6 +1639,39 @@ body {
 
 .dim {
   color: var(--fg-dim);
+}
+
+/* 页面级加载：所有页面首屏统一用它（转圈 + 一句说明），别先闪一个空列表 */
+.pageload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  min-height: 220px;
+  padding: var(--sp-8) var(--sp-4);
+  text-align: center;
+}
+
+.pageload__ring {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--fg-muted) 22%, transparent);
+  border-top-color: var(--accent-line);
+  animation: spin 0.8s linear infinite;
+}
+
+.pageload__label {
+  font-size: var(--fs-sm);
+  color: var(--fg);
+}
+
+.pageload__hint {
+  max-width: 400px;
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  line-height: 1.7;
 }
 
 .empty {

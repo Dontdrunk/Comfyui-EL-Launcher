@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { EnvBackupFile, OpResult, PipPackage } from '@shared/types'
 import { FolderOpen, Package, RefreshCw, Search } from 'lucide'
 import { Icon } from '../components/Icon'
-import { Empty, Modal, Notice, Panel, Spinner } from '../components/ui'
+import { Empty, Modal, Notice, PageLoading, Panel, Spinner } from '../components/ui'
 import { formatBytes, formatDateTime } from '../lib/format'
 import { useApp } from '../store'
 
@@ -334,9 +334,7 @@ export default function Packages(): React.JSX.Element {
           {packages.length === 0 ? (
             <div className="plugin-page__body">
               {loading ? (
-                <div style={{ padding: 'var(--sp-4)' }}>
-                  <Spinner label="正在读取已安装的包…" />
-                </div>
+                <PageLoading label="正在读取已安装的包…" hint="读取 python_embeded 里的 site-packages。" />
               ) : (
                 <Empty
                   icon={Package}

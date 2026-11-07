@@ -16,6 +16,7 @@ import {
   Led,
   Modal,
   Notice,
+  PageLoading,
   Panel,
   Readout,
   Readouts,
@@ -392,6 +393,11 @@ export default function Versions(): React.JSX.Element {
   }
 
   /* ── 渲染 ── */
+
+  /* 首屏：还没读到版本状态就先转圈，别先渲染一排「—」 */
+  if (!state && !listError && root) {
+    return <PageLoading label="正在读取版本信息…" hint="读取本地 git 状态、提交历史与备份列表。" />
+  }
 
   if (git && !git.ok) {
     return (

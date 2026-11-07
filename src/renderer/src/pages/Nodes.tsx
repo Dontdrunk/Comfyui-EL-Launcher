@@ -16,6 +16,7 @@ import {
   Led,
   Modal,
   Notice,
+  PageLoading,
   Panel,
   Progress,
   Segmented,
@@ -23,7 +24,7 @@ import {
   Switch,
   Tag
 } from '../components/ui'
-import { depDot } from '@shared/depStatus.mjs'
+import { depDot, depVisualTone } from '@shared/depStatus.mjs'
 import { formatDateTime } from '../lib/format'
 import { useApp } from '../store'
 
@@ -49,7 +50,8 @@ export default function Nodes(): React.JSX.Element {
 
   const [tab, setTab] = useState<Tab>('installed')
   const [installed, setInstalled] = useState<InstalledNode[]>([])
-  const [loading, setLoading] = useState(false)
+  /** 首屏就是「加载中」，否则会先闪一下「custom_nodes 目录为空」再出现列表 */
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
 
   /** 全量依赖检查结果：给「依赖」列的状态圆点用（单次 python 调用，12 个插件约 1 秒） */
@@ -558,7 +560,8 @@ export default function Nodes(): React.JSX.Element {
             value={tab}
             onChange={setTab}
             options={[
-              { value: 'installed', label: `已安装 ${installed.length}` },
+              // 首屏还在读目录时不要显示「已安装 0」，那会让人以为插件没了
+          { value: 'installed', label: loading && installed.length === 0 ? '已安装 …' : `已安装 ${installed.length}` },
               { value: 'search', label: '插件安装' }
             ]}
           />
@@ -591,7 +594,12 @@ export default function Nodes(): React.JSX.Element {
         {/* ══════════ 已安装：表头即工具栏（启用 / 名称+搜索 / 依赖 / 远程地址 / 版本ID / 更新时间 / 操作） ══════════ */}
         {/* ══════════ 已安装 ══════════ */}
         {tab === 'installed' &&
-          (installed.length === 0 ? (
+          (loading && installed.length === 0 ? (
+            <PageLoading
+              label="正在读取插件目录…"
+              hint="顺便检查每个插件的 Python 依赖是否装齐。"
+            />
+          ) : installed.length === 0 ? (
             <Empty
               icon={Plug}
               title="custom_nodes 目录为空"
@@ -1149,33 +1157,23 @@ function DepCell({
     }
   }
 
-  /* 浮层没打开时也要能报「缺几个」——用全量检查的摘要，别等悬停 */
-  const missing = detail && !detail.error ? detail.entries.filter((e) => !e.installed).length : (summary?.missing ?? 0)
-  const totalCount = detail && !detail.error ? detail.entries.length : (summary?.total ?? node.requirementsCount)
-  const textTone = missing > 0 ? ' rowlink--danger' : ''
-
+  /* 状态完全由指示器表达；具体缺什么、装没装，悬停看浮层 */
   const dot = depDot(node.hasRequirements, summary)
+  const visual = depVisualTone(node.hasRequirements, summary)
+  const missing = detail?.entries.filter((e) => !e.installed).length ?? 0
 
   return (
     <>
       <button
         type="button"
-        className={`rowlink rowlink--dep${textTone}`}
+        className="rowlink rowlink--dep"
         title={dot ? `${dot.hint} · 悬停查看明细` : '没有 requirements.txt'}
+        aria-label={dot ? dot.hint : '没有 requirements.txt'}
         onMouseEnter={(e) => open(e.currentTarget)}
         onMouseLeave={scheduleClose}
         onClick={(e) => open(e.currentTarget)}
       >
-        {dot && <span className={`depdot depdot--${dot.tone}`} aria-hidden />}
-        {!node.hasRequirements
-          ? '无'
-          : loading
-            ? '…'
-            : detail?.error
-              ? '查看'
-              : missing > 0
-                ? `缺 ${missing}`
-                : `${totalCount} 项`}
+        <span className={`depstatus depstatus--${visual}`} aria-hidden />
       </button>
 
       {anchor && detail && (
