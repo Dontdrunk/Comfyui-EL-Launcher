@@ -2,9 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { depDot, depVisualTone } from './depStatus.mjs'
 
-test('没有 requirements.txt 的插件不显示圆点', () => {
-  assert.equal(depDot(false, { total: 0, missing: 0 }), null)
-  assert.equal(depDot(false, null), null)
+test('没有 requirements.txt 的插件也算就绪：绿灯 + 可运行提示', () => {
+  const dot = depDot(false, null)
+  assert.equal(dot.tone, 'ok')
+  assert.match(dot.hint, /可直接运行/)
+  assert.equal(depDot(false, { total: 0, missing: 0 }).tone, 'ok')
 })
 
 test('还没拿到检查结果时是灰色（检查中）', () => {
@@ -36,8 +38,8 @@ test('一个都没装上 = 红', () => {
   assert.match(dot.hint, /全部缺失/)
 })
 
-test('声明了依赖但 requirements 为空时是灰色', () => {
-  assert.equal(depDot(true, { total: 0, missing: 0 }).tone, 'idle')
+test('声明了依赖但 requirements 为空时也算就绪', () => {
+  assert.equal(depDot(true, { total: 0, missing: 0 }).tone, 'ok')
 })
 
 test('边界：缺 1 个也算黄，不是红', () => {
@@ -46,8 +48,8 @@ test('边界：缺 1 个也算黄，不是红', () => {
 })
 /* ── 指示器视觉状态 ── */
 
-test('视觉状态：没声明依赖是 none，未检查是 busy', () => {
-  assert.equal(depVisualTone(false, null), 'none')
+test('视觉状态：没声明依赖是 ok，未检查是 busy', () => {
+  assert.equal(depVisualTone(false, null), 'ok')
   assert.equal(depVisualTone(true, null), 'busy')
 })
 
@@ -62,6 +64,6 @@ test('视觉状态：绿黄红三档', () => {
   assert.equal(depVisualTone(true, { total: 2, missing: 1 }), 'warn')
 })
 
-test('视觉状态：声明了但 requirements 为空 → none', () => {
-  assert.equal(depVisualTone(true, { total: 0, missing: 0 }), 'none')
+test('视觉状态：声明了但 requirements 为空 → ok', () => {
+  assert.equal(depVisualTone(true, { total: 0, missing: 0 }), 'ok')
 })
