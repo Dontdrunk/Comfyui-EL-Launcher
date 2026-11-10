@@ -1,0 +1,4 @@
+{
+  "extends": "@explorer-launcher/config/typescript/react.json",
+  "include": ["src"]
+}

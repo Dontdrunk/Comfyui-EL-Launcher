@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/typegen.ts"]
+    },
+    "apps/desktop": {
+      "entry": [
+        "src/main/index.ts",
+        "src/preload/index.ts",
+        "src/preload/tray-menu.ts",
+        "vite.main.config.ts",
+        "vite.preload.config.ts"
+      ]
+    }
+  }
+}

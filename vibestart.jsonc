@@ -1,0 +1,21 @@
+{
+  "$schema": "https://vibestart.net/schema.json",
+
+  "name": "explorer-launcher",
+  "version": "0.2.2",
+
+  "stack": {
+    "mode": "standard",
+    "toolchain": "vite-plus",
+    "frontend": "react",
+    "framework": "spa",
+    "router": "tanstack-router",
+    "ui": "shadcn",
+    "desktop": "electron",
+    "testing": "playwright",
+  },
+
+  "addons": ["knip", "ultracite"],
+
+  "channel": "recommended",
+}

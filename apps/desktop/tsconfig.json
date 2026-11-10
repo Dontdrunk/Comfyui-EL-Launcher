@@ -1,0 +1,4 @@
+{
+  "extends": "@explorer-launcher/config/typescript/legacy-node.json",
+  "include": ["src", "scripts", "vite.main.config.ts", "vite.preload.config.ts"]
+}
