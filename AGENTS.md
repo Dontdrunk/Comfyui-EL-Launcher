@@ -50,17 +50,17 @@ Converge on the simplest durable design that meets current requirements, and lan
 
 ## Map
 
-| Path                | Owns                                                                                                                         |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`          | React SPA: TanStack Router file routes, TanStack Query; e2e tests in `tests/e2e/`                                            |
-| `packages/ui`       | shadcn/ui components (Base UI), Tailwind theme in `src/styles/globals.css`                                                   |
-| `apps/desktop`      | Electron main and preload processes, the `https://app.localhost/` renderer server, IPC handlers, and electron-builder config |
-| `packages/electron` | The IPC contract: channel names, payload schemas, and the `window.desktop` type                                              |
-| `packages/config`   | Shared TypeScript presets                                                                                                    |
+| Path                | Owns                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`          | React SPA: TanStack Router file routes, TanStack Query; the launcher screens live in `src/launcher`                                                           |
+| `packages/ui`       | shadcn/ui components (Base UI), Tailwind theme in `src/styles/globals.css`                                                                                    |
+| `apps/desktop`      | Electron main and preload processes, the `https://app.localhost/` renderer server, IPC handlers, electron-builder config, and the Playwright end-to-end suite |
+| `packages/electron` | The IPC contract: channel names, payload schemas, and the `window.launcher` type                                                                              |
+| `packages/config`   | Shared TypeScript presets                                                                                                                                     |
 
 `vp run dev` serves the app on :5173. `vp run build` writes static files to `apps/web/dist`; there is no server.
 
-The desktop app wraps `apps/web`: `vp run dev` starts the web dev server and opens it in an Electron window; `vp run package:desktop` builds the web app and packages the installer with electron-builder. The window loads `https://app.localhost/`, an origin the main process answers itself from `apps/web/dist` with the SPA fallback. Restart `vp run dev` after changing main or preload code. Main, preload, and the renderer share the IPC contract in `packages/electron`; the renderer reads it from `window.desktop`.
+The desktop app wraps `apps/web`: `vp run dev` starts the web dev server and opens it in an Electron window; `vp run package:desktop` builds the web app and packages the installer with electron-builder. The window loads `https://app.localhost/`, an origin the main process answers itself from `apps/desktop/dist/renderer` (a copy of `apps/web/dist` made by `apps/desktop/scripts/copy-renderer.ts`) with the SPA fallback. Restart `vp run dev` after changing main or preload code. Main, preload, and the renderer share the IPC contract in `packages/electron`; the renderer reads it from `window.launcher`.
 
 ## Conventions
 
@@ -81,18 +81,18 @@ A test earns its upkeep when its expected values come from a source independent 
 - Watch every new test go red before it goes green. A bug fix starts from a test that reproduces the bug.
 - When a test fails, fix the code. Change, skip, or weaken an assertion only when the specified behavior changed, and say so in your report.
 
-| Layer      | Location                                                          | Runs against                                       | Write it for                                                                             |
-| ---------- | ----------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| End-to-end | `apps/web/tests/e2e/*.e2e.ts`                                     | Playwright driving Chromium against the dev server | Journeys that decide whether the product works                                           |
-| Unit       | `*.test.ts` beside the code in `apps/web/src` or `packages/*/src` | Node, no I/O                                       | Branching logic: pricing, permissions, state machines, parsers, calculations, edge cases |
+| Layer      | Location                                                              | Runs against                              | Write it for                                                                             |
+| ---------- | --------------------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------- |
+| End-to-end | `apps/desktop/tests/e2e/*.e2e.ts`                                     | Playwright driving the built Electron app | Journeys that decide whether the product works                                           |
+| Unit       | `*.test.ts` beside the code in `apps/desktop/src` or `packages/*/src` | Node, no I/O                              | Branching logic: pricing, permissions, state machines, parsers, calculations, edge cases |
 
-`apps/web/tests/support/server.ts` starts the stack for the e2e tests on :3200 (`E2E_TEST_PORT`): `vp dev`. A second checkout runs its tests at the same time on another port.
+`apps/desktop/package.json#test:e2e` builds the renderer, copies it into `dist/renderer`, builds main and preload, then starts Playwright. Each case launches its own app with a temporary `--user-data-dir`, so the suite never touches the user's `%APPDATA%\explorer-launcher` config or the single-instance lock, and cases run serially.
 
-Open and reload pages with `visit()` before clicking. Network idle does not prove hydration; controls that need client JavaScript must stay disabled until hydration completes. Assert with Playwright's web-first assertions (`toBeVisible`, `toHaveURL`, `toBeChecked`).
+Assert through the real window: roles and accessible names for controls, `toHaveURL` for routing, attributes such as `html[data-theme]` for state that persists. Wait for the shell to boot with web-first assertions; the window exists before React has mounted.
 
-E2E tests in `apps/web/tests/e2e` are the specification: changing, skipping, or weakening an assertion takes the user's approval first.
+E2E tests in `apps/desktop/tests/e2e` are the specification: changing, skipping, or weakening an assertion takes the user's approval first.
 
-While iterating, run the narrowest set that covers the change: `vp test --project unit`, `vp test --changed`, a single file, or `vp exec playwright test <file>` in `apps/web`.
+While iterating, run the narrowest set that covers the change: `vp test --project unit`, `vp test --changed`, a single file, or `vp exec playwright test <file>` in `apps/desktop`.
 
 ## Done
 
@@ -109,6 +109,11 @@ Before you report it, review the whole diff in a fresh context when your tools a
   `src/launcher/**` 是从旧 `src/renderer/src` 整体迁入的组件、页面、样式与 zustand store。
 - `packages/electron`：IPC 契约（通道常量 `ipc.ts`、领域模型 `types.ts`、
   `LauncherApi`），主进程与渲染进程都只从这里取类型。
+- `apps/desktop/scripts/package.ts`：发版入口。剔除 `ELECTRON_RUN_AS_NODE`、
+  默认走 electron-builder 国内镜像，并把便携版补进 `latest.yml`。
+- `apps/desktop/src/main/versions.test.ts` 锁住三处 `package.json` 的版本一致
+  （界面读 web、安装包读 desktop）；`scripts/check-contrast.ts` 守 `tokens.css` 的
+  WCAG 对比度；e2e 在 `apps/desktop/tests/e2e` 里驱动真实 Electron 窗口。
 - `vibestart.jsonc` 是脚手架的维护记录，保持 CLI 写入的 `name`/`version` 不变。
 
 ### 改动边界（重要）

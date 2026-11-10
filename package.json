@@ -1,16 +1,17 @@
 {
   "name": "explorer-launcher",
-  "version": "0.0.0",
+  "version": "0.1.7",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vp run -r --parallel dev",
     "build": "vp run -r build",
-    "ready": "vp run typegen && vp check && vp run knip && vp test && vp run test:e2e && vp run -r build",
+    "ready": "vp run typegen && vp check && vp run check:contrast && vp run knip && vp test && vp run test:e2e && vp run -r build",
     "prepare": "vp config",
     "typegen": "vpx scripts/typegen.ts",
+    "check:contrast": "vpx scripts/check-contrast.ts",
     "package:desktop": "vp run --filter @explorer-launcher/desktop package",
-    "test:e2e": "vp run --filter @explorer-launcher/web test:e2e",
+    "test:e2e": "vp run --filter @explorer-launcher/desktop test:e2e",
     "knip": "knip"
   },
   "devDependencies": {

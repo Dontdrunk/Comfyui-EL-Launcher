@@ -16,7 +16,7 @@ import type {
  */
 
 /** 首次启动的默认 ComfyUI 目录（用户已在需求中指明的固定路径） */
-export const DEFAULT_COMFY_ROOT = "D:\\Projects\\Procedure\\ComfyUI-X";
+const DEFAULT_COMFY_ROOT = "D:\\Projects\\Procedure\\ComfyUI-X";
 
 /** 监听地址：空值回落 127.0.0.1，顺手限长（只做形状校验，能不能绑上交给 ComfyUI 报错） */
 function normalizeListen(v: unknown): string {
@@ -39,7 +39,7 @@ const BASE_LAUNCH: LaunchDefaults = {
   disableApiNodes: false,
 };
 
-export const BUILTIN_PRESETS: LaunchPreset[] = [
+const BUILTIN_PRESETS: LaunchPreset[] = [
   {
     id: "standard",
     name: "标准模式",
@@ -85,7 +85,7 @@ function defaultLaunch(): LaunchDefaults {
   return { ...BASE_LAUNCH };
 }
 
-export function defaultSettings(): AppSettings {
+function defaultSettings(): AppSettings {
   return {
     comfyRoot: DEFAULT_COMFY_ROOT,
     theme: "dark",
@@ -208,7 +208,7 @@ function merge(base: AppSettings, patch: Partial<AppSettings>): AppSettings {
   return out;
 }
 
-export class SettingsStore {
+class SettingsStore {
   private current: AppSettings = defaultSettings();
   private filePath: string | null = null;
   private loaded = false;

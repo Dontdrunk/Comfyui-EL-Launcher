@@ -1,6 +1,6 @@
 {
   "name": "@explorer-launcher/web",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "type": "module",
   "imports": {
@@ -9,20 +9,15 @@
   "scripts": {
     "dev": "vp dev",
     "build": "vp build",
-    "preview": "vp preview",
-    "test:e2e": "playwright test"
+    "preview": "vp preview"
   },
   "dependencies": {
     "@explorer-launcher/electron": "workspace:*",
     "@explorer-launcher/ui": "workspace:*",
     "@tanstack/react-query": "catalog:",
-    "@tanstack/react-query-devtools": "catalog:",
     "@tanstack/react-router": "catalog:",
-    "@tanstack/react-router-devtools": "catalog:",
     "lucide": "^1.57.0",
     "morphicons": "^1.7.1",
-    "motion": "catalog:",
-    "next-themes": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "sonner": "catalog:",
@@ -30,14 +25,12 @@
   },
   "devDependencies": {
     "@explorer-launcher/config": "workspace:*",
-    "@playwright/test": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/router-plugin": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
-    "es-toolkit": "catalog:",
     "oxc-transform-react": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

@@ -89,7 +89,7 @@ async function currentHead(comfyDir: string): Promise<{
   };
 }
 
-export async function snapshotNodes(
+async function snapshotNodes(
   customNodesDir: string
 ): Promise<BackupNodeEntry[]> {
   const dirs = await listNodeDirs(customNodesDir);

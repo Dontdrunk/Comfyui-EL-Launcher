@@ -31,9 +31,27 @@ await retry(
   { delay: 200, retries: 300 }
 );
 
+// 宿主环境会带这两个变量：ELECTRON_RUN_AS_NODE=1 会让 electron.exe 退化成纯 Node，
+// 窗口根本不会出现。派生 electron 之前必须清掉，用户普通终端保持原样。
+const env: Record<string, string> = {};
+
+for (const [key, value] of Object.entries(process.env)) {
+  if (value === undefined) {
+    continue;
+  }
+
+  if (key === "ELECTRON_RUN_AS_NODE" || key === "ELECTRON_NO_ATTACH_CONSOLE") {
+    continue;
+  }
+
+  env[key] = value;
+}
+
+env.ELECTRON_RENDERER_URL = rendererUrl;
+
 const app = spawn(electron, ["."], {
   cwd: path.join(import.meta.dirname, ".."),
-  env: { ...process.env, ELECTRON_RENDERER_URL: rendererUrl },
+  env,
   stdio: "inherit",
 });
 

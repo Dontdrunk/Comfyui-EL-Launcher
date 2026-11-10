@@ -267,7 +267,7 @@ export async function listRemoteTags(
 
 /* ── 定向浅取 ── */
 
-export interface FetchResult {
+interface FetchResult {
   ref: string;
   seconds: number;
 }
@@ -329,7 +329,7 @@ export async function listCommits(
   return { commits, total: Number.isFinite(total) ? total : 0 };
 }
 
-export async function fetchTag(
+async function fetchTag(
   root: string,
   tag: string,
   onLine?: (s: LogStream, t: string) => void,
@@ -358,7 +358,7 @@ export async function fetchTag(
  * 只取缺的那些：官方便携版自带全部历史 tag，正常一次刷新就是 1~2 个。
  * master 不在这里取，见 fetchRemote。
  */
-export async function fetchRemoteTags(
+async function fetchRemoteTags(
   root: string,
   onLine?: (s: LogStream, t: string) => void,
   signal?: AbortSignal,
@@ -401,7 +401,7 @@ export async function fetchRemoteTags(
 }
 
 /** 定向取 master。切换分支只取尖端；刷新时补齐 master 全部历史。 */
-export async function fetchMaster(
+async function fetchMaster(
   root: string,
   onLine?: (s: LogStream, t: string) => void,
   signal?: AbortSignal,
@@ -490,7 +490,7 @@ export async function fetchRemote(
 /* ── requirements 差异 ── */
 
 /** 读取某个 ref 的 requirements.txt；该对象不存在时返回 null */
-export async function requirementsAt(
+async function requirementsAt(
   root: string,
   ref: string
 ): Promise<string[] | null> {
@@ -507,7 +507,7 @@ export async function requirementsAt(
   return parseRequirements(content);
 }
 
-export function diffRequirements(
+function diffRequirements(
   from: string[] | null,
   to: string[] | null
 ): RequirementsDiff {

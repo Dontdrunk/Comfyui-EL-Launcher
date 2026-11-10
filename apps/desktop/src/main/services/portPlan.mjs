@@ -50,7 +50,7 @@ export function listenersOf(netstatText, port) {
 }
 
 /** 进程名看着像 Python（python.exe / python3.13.exe） */
-export function looksLikePython(owner) {
+function looksLikePython(owner) {
   return /^python[\d.]*\.exe$/i.test(String(owner?.name ?? "").trim());
 }
 

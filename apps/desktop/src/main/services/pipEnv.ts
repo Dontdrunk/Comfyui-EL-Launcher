@@ -88,7 +88,7 @@ function assertVersion(version: string): void {
 }
 
 /** 备份名允许中文。去掉 Windows 文件名里的非法字符，重名由调用方加时间后缀。 */
-export function safeBackupName(raw: string): string {
+function safeBackupName(raw: string): string {
   const cleaned = raw
     .replaceAll(/[<>:"/\\|?*\u0000-\u001F]/g, "")
     .replaceAll(/[. ]+$/g, "")

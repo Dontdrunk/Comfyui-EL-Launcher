@@ -1,7 +1,9 @@
 {
   "name": "@explorer-launcher/desktop",
-  "version": "0.0.0",
+  "version": "0.1.7",
   "private": true,
+  "description": "探索者启动器 · ComfyUI 桌面启动器",
+  "author": "Dontdrunk",
   "type": "module",
   "main": "./dist/main/index.js",
   "imports": {
@@ -9,12 +11,15 @@
   },
   "scripts": {
     "build": "vp build --config vite.main.config.ts && vp build --config vite.preload.config.ts",
-    "package": "vp run --filter @explorer-launcher/web build && node scripts/copy-renderer.ts && vp run build && electron-builder --config electron-builder.yml",
-    "dev": "vp run build && node scripts/dev.ts"
+    "build:renderer": "vp run --filter @explorer-launcher/web build && node scripts/copy-renderer.ts",
+    "package": "vp run build:renderer && vp run build && vpx scripts/package.ts",
+    "dev": "vp run build && node scripts/dev.ts",
+    "test:e2e": "vp run build:renderer && vp run build && playwright test"
   },
   "devDependencies": {
     "@explorer-launcher/config": "workspace:*",
     "@explorer-launcher/electron": "workspace:*",
+    "@playwright/test": "catalog:",
     "@types/node": "catalog:",
     "electron": "catalog:",
     "electron-builder": "catalog:",

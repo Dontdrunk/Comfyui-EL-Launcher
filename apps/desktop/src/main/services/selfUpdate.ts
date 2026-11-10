@@ -195,7 +195,7 @@ async function downloadTo(
   });
 }
 
-export async function checkSelfUpdate(): Promise<SelfUpdateStatus> {
+async function checkSelfUpdate(): Promise<SelfUpdateStatus> {
   const packaged = app.isPackaged;
 
   try {
@@ -314,7 +314,7 @@ function swapPortable(next: string, current: string): void {
   );
 }
 
-export async function installSelfUpdate(
+async function installSelfUpdate(
   onProgress: (percent: number) => void
 ): Promise<void> {
   if (!app.isPackaged) {

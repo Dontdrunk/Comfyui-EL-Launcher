@@ -171,7 +171,7 @@ export const WORD_SLIDERS: WordSliderSpec[] = [
 ];
 
 /** 大字不跟着风暴预设走，换「安静 / 终端」不该把标题清掉 */
-export const WORDMARK_KEYS = [
+const WORDMARK_KEYS = [
   "wordOn",
   "word",
   "wordSize",
@@ -310,7 +310,7 @@ function hslToHex(h: number, s: number, l: number): string {
 }
 
 /** 保持色相与饱和度，只翻亮度 */
-export function flipLightness(hex: string): string {
+function flipLightness(hex: string): string {
   const [r, g, b] = hexToRgb(hex);
   const [h, s, l] = rgbToHsl(r, g, b);
 
@@ -330,7 +330,7 @@ export function flipLightness(hex: string): string {
  * 原因是浅灰压浅灰比深灰压深灰更难看出来 —— 同样的 alpha，
  * 亮底上的图底差会被背景"吃"掉更多，所以这里补一个系数。
  */
-export const LIGHT_OPACITY_GAIN = 2.4;
+const LIGHT_OPACITY_GAIN = 2.4;
 
 /** 按当前主题给出实际喂给组件的参数。亮色主题下恒定生效，没有开关 */
 export function adaptForTheme(p: GlitchParams, light: boolean): GlitchParams {

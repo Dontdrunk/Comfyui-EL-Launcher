@@ -36,7 +36,7 @@ interface JobRecord extends JobSnapshot {
   seq: number;
 }
 
-export class JobManager {
+class JobManager {
   private readonly jobs = new Map<string, JobRecord>();
   private readonly listeners = new Set<(e: JobEvent) => void>();
 

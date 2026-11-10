@@ -23,15 +23,18 @@ Open http://localhost:5173.
 ## Commands
 
 ```sh
-vp run typegen    # route types; dev generates these automatically
-vp check          # format, lint, type check
-vp run knip       # unused files, exports, dependencies, and catalog entries
-vp test           # unit tests (Vitest)
-vp run test:e2e   # end-to-end tests (Playwright) in Chromium, against the dev server
-vp run ready      # typegen + check + knip + test + test:e2e + production build
+vp run typegen        # route types; dev generates these automatically
+vp check              # format, lint, type check
+vp run check:contrast # WCAG contrast guard for the token palette
+vp run knip           # unused files, exports, dependencies, and catalog entries
+vp test               # unit tests (Vitest)
+vp run test:e2e       # end-to-end tests (Playwright) driving the built Electron app
+vp run ready          # typegen + check + contrast + knip + test + test:e2e + production build
 ```
 
-The first `vp run test:e2e` needs a browser: `cd apps/web && vp exec playwright install chromium`.
+`vp run test:e2e` builds the renderer and the desktop bundles, then drives the real
+Electron window through Playwright with a throwaway `--user-data-dir`. No browser
+download is needed: Playwright launches the Electron binary itself.
 
 ## 这是"探索者启动器"的重构骨架
 
@@ -57,9 +60,20 @@ The first `vp run test:e2e` needs a browser: `cd apps/web && vp exec playwright 
 
 ```sh
 vp check     # 格式化 + lint + 类型（提交前必须绿）
-vp test      # Vitest 单测（portPlan / registryPlan / selfUpdatePlan / depStatus / renderer-route）
-vp run ready # 全量：typegen + check + knip + test + e2e + 生产构建
+vp test      # Vitest 单测（portPlan / registryPlan / selfUpdatePlan / depStatus / renderer-route / 版本一致性）
+vp run ready # 全量：typegen + check + 对比度 + knip + 单测 + Electron e2e + 生产构建
 ```
+
+### 发布
+
+`vp run package:desktop` 依次构建渲染进程、主进程与 preload，然后由
+`apps/desktop/scripts/package.ts` 调 electron-builder，产出
+`apps/desktop/release/ExplorerLauncher-<version>-setup.exe`、`-portable.exe` 与 `latest.yml`
+（脚本会把便携版补进 `latest.yml`，并默认走 npmmirror 的 electron-builder 镜像）。
+
+版本号在 `package.json`、`apps/web/package.json`、`apps/desktop/package.json` 三处必须一致：
+界面的版本取自 web，安装包与 `latest.yml` 取自 desktop。漂移由
+`apps/desktop/src/main/versions.test.ts` 拦住。
 
 ### 遗留事项
 
@@ -68,4 +82,6 @@ vp run ready # 全量：typegen + check + knip + test + e2e + 生产构建
   但类型检查、eqeqeq、hook 依赖、未使用变量仍然生效。新代码不要放进这些目录。
 - `apps/desktop` 继承 `legacy-node.json`（关闭 `noUncheckedIndexedAccess`），
   原因是旧主进程代码大量按"下标一定存在"书写；`apps/web` 保持全严格。
-- `tv run test:e2e` 还是模板骨架的浏览器用例，尚未覆盖 Electron 窗口与真实启动流程。
+- 真实 ComfyUI 启动、切版本、装卸插件这些长流程没有进 e2e：它们依赖本机
+  ComfyUI 安装（python_embeded / models 目录），机器之间不可移植。e2e 覆盖的是
+  外壳、路由、协议服务与主题持久化；长流程按需用 `XL_CAPTURE` 截图脚本人工验证。

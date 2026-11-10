@@ -12,7 +12,6 @@
   "iconLibrary": "lucide",
   "aliases": {
     "components": "#src/components",
-    "hooks": "@explorer-launcher/ui/hooks",
     "lib": "#src/lib",
     "utils": "@explorer-launcher/ui/lib/utils",
     "ui": "@explorer-launcher/ui/components"

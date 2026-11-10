@@ -170,7 +170,7 @@ export async function scanModels(root: string): Promise<ModelScanReport> {
  * 把相对路径解析为 models 目录内的绝对路径。
  * 任何越界（..、绝对路径、盘符）都会抛错，杜绝路径穿越。
  */
-export function resolveModelPath(modelsDir: string, rel: string): string {
+function resolveModelPath(modelsDir: string, rel: string): string {
   if (!rel || rel.includes("\0")) {
     throw new Error("非法路径");
   }

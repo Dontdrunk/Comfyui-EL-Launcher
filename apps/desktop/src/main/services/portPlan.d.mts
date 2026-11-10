@@ -15,10 +15,6 @@ export function listenersOf(
   port: number
 ): number[];
 
-export function looksLikePython(
-  owner: ProcessOwnerLike | null | undefined
-): boolean;
-
 export function looksLikeComfy(
   owner: ProcessOwnerLike | null | undefined
 ): boolean;

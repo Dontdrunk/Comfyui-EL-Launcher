@@ -7,14 +7,14 @@ import type { ThemeMode } from "@explorer-launcher/electron";
  * Windows 下 titleBarStyle:'hidden' + titleBarOverlay 会保留原生最小化/最大化/关闭按钮，
  * 但遮罩颜色由我们指定，必须随亮/暗主题同步，否则按钮在浅色底上看不见。
  */
-export const TITLEBAR_HEIGHT = 40;
+const TITLEBAR_HEIGHT = 40;
 
 const COLORS: Record<ThemeMode, { color: string; symbolColor: string }> = {
   dark: { color: "#171718", symbolColor: "#d9d9d9" },
   light: { color: "#ffffff", symbolColor: "#202121" },
 };
 
-export function titleBarOverlayFor(theme: ThemeMode): {
+function titleBarOverlayFor(theme: ThemeMode): {
   color: string;
   symbolColor: string;
   height: number;

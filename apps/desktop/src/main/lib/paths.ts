@@ -34,7 +34,7 @@ export interface ComfyPaths {
   logsDir: string;
 }
 
-export const DATA_DIR_NAME = "_explorer-launcher";
+const DATA_DIR_NAME = "_explorer-launcher";
 
 export function resolveComfyPaths(root: string): ComfyPaths {
   const comfyDir = join(root, "ComfyUI");

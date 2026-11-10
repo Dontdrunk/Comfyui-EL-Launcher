@@ -30,7 +30,7 @@ export type PageId =
 const MAX_LOG_LINES = 3000;
 
 /** 全局轻提示：装/卸/更新这类「跑完就该知道」的结果统一走这里 */
-export interface Toast {
+interface Toast {
   id: number;
   tone: "ok" | "warn" | "error";
   text: string;

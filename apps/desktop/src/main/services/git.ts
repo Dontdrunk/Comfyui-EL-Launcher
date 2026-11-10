@@ -34,7 +34,7 @@ export async function gitRaw(
   return await run("git", args, runOpts);
 }
 
-export class GitError extends Error {
+class GitError extends Error {
   readonly code: number | null;
   readonly stdout: string;
   readonly stderr: string;

@@ -32,7 +32,7 @@ const MAX_SERVICE_LINES = 3000;
 const READY_TIMEOUT_MS = 300_000;
 const READY_POLL_MS = 700;
 
-export class ServiceManager {
+class ServiceManager {
   private child: ChildProcess | null = null;
   private state: ServiceStatus["state"] = "stopped";
   private pid: number | null = null;
@@ -558,16 +558,14 @@ export class ServiceManager {
 /* ── 工具函数 ── */
 
 /** 实际访问/探测用的主机：绑定 0.0.0.0 或没开远程时，回环地址才是通的 */
-export function accessHost(
-  launch: Pick<LaunchDefaults, "remote" | "listen">
-): string {
+function accessHost(launch: Pick<LaunchDefaults, "remote" | "listen">): string {
   return launch.remote && launch.listen && launch.listen !== "0.0.0.0"
     ? launch.listen
     : "127.0.0.1";
 }
 
 /** 用 /system_stats 判断服务是否真的起来了 */
-export async function probeSystemStats(
+async function probeSystemStats(
   host: string,
   port: number,
   timeoutMs = 2500
@@ -595,7 +593,7 @@ export async function probeSystemStats(
   });
 }
 
-export async function isPortFree(port: number): Promise<boolean> {
+async function isPortFree(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const srv = createServer();
     srv.once("error", () => {
@@ -730,7 +728,7 @@ async function listPortCandidates(port: number): Promise<PortCandidate[]> {
  * 优先返回本机这套 ComfyUI，其次回环监听的那个。
  * 拿不到命令行时 commandLine 为 null —— 这种情况不会自动接管，只会提示用户。
  */
-export async function findPortOwner(
+async function findPortOwner(
   port: number,
   comfyRoot: string
 ): Promise<PortOwner | null> {

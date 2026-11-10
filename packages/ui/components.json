@@ -13,7 +13,6 @@
   "aliases": {
     "components": "@explorer-launcher/ui/components",
     "utils": "@explorer-launcher/ui/lib/utils",
-    "hooks": "@explorer-launcher/ui/hooks",
     "lib": "@explorer-launcher/ui/lib",
     "ui": "@explorer-launcher/ui/components"
   },

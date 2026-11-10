@@ -32,7 +32,7 @@ async function exists(p: string): Promise<boolean> {
 }
 
 /** 从 comfyui_version.py 解析 __version__ */
-export function parseVersionFile(content: string): string | null {
+function parseVersionFile(content: string): string | null {
   const m = /__version__\s*=\s*["']([^"']+)["']/.exec(content);
 
   return m ? m[1] : null;

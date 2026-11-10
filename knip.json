@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
-      "entry": ["scripts/typegen.ts"]
+      "entry": ["scripts/typegen.ts", "scripts/check-contrast.ts"]
     },
     "apps/desktop": {
       "entry": [
@@ -10,7 +10,9 @@
         "src/preload/index.ts",
         "src/preload/tray-menu.ts",
         "vite.main.config.ts",
-        "vite.preload.config.ts"
+        "vite.preload.config.ts",
+        "tests/e2e/**/*.e2e.ts",
+        "scripts/package.ts"
       ]
     }
   }
