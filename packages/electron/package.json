@@ -9,9 +9,6 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "dependencies": {
-    "zod": "catalog:"
-  },
   "devDependencies": {
     "@explorer-launcher/config": "workspace:*",
     "@types/node": "catalog:",

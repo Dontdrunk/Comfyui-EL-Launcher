@@ -12,7 +12,8 @@
         "vite.main.config.ts",
         "vite.preload.config.ts",
         "tests/e2e/**/*.e2e.ts",
-        "scripts/package.ts"
+        "scripts/package.ts",
+        "scripts/check-bundle.ts"
       ]
     }
   }
