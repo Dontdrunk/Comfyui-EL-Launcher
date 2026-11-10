@@ -30,6 +30,14 @@ export interface LaunchDefaults {
   disableApiNodes: boolean;
 }
 
+/** 模型管理页的快捷目录卡片 */
+export interface ModelShortcut {
+  /** 绝对路径 */
+  path: string;
+  /** 卡片标题；空串表示用路径最后一段 */
+  name: string;
+}
+
 export interface AppSettings {
   /** ComfyUI 便携版根目录，例如 D:\Projects\Procedure\ComfyUI-X */
   comfyRoot: string;
@@ -39,6 +47,8 @@ export interface AppSettings {
   presets: LaunchPreset[];
   /** 当前选中的预设 id，null 表示自定义 */
   activePresetId: string | null;
+  /** 模型管理页的快捷目录卡片，按添加顺序显示 */
+  modelShortcuts: ModelShortcut[];
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -65,6 +75,8 @@ export interface EnvLayout {
   mainPy: string | null;
   customNodesDir: string | null;
   modelsDir: string | null;
+  /** ComfyUI/input：上传/工作流输入图片目录 */
+  inputDir: string | null;
   outputDir: string | null;
   updateDir: string | null;
   updateScript: string | null;
@@ -108,10 +120,19 @@ export interface DiskProbe {
 
 export type LogStream = "stdout" | "stderr" | "system";
 
+/**
+ * 日志级别：控制台按它上色，与输出通道无关。
+ * Python 的 logging 默认把 INFO/WARNING/ERROR 全写到 stderr，
+ * 所以「stderr = 错误」会让整屏普通日志变红。
+ */
+export type LogLevel = "debug" | "info" | "success" | "warn" | "error";
+
 export interface LogLine {
   seq: number;
   ts: number;
   stream: LogStream;
+  /** 严重级别；由写入方或内容判定，stream 只保留来源信息 */
+  level: LogLevel;
   text: string;
 }
 
@@ -642,7 +663,8 @@ export interface LauncherApi {
   /* ---- 设置 ---- */
   getSettings(): Promise<AppSettings>;
   patchSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
-  pickDirectory(defaultPath?: string): Promise<string | null>;
+  /** 选目录对话框；title 为空时用通用标题 */
+  pickDirectory(defaultPath?: string, title?: string): Promise<string | null>;
 
   /* ---- 环境 ---- */
   checkEnv(root?: string): Promise<EnvLayout>;
@@ -656,8 +678,12 @@ export interface LauncherApi {
   stopService(): Promise<ServiceStatus>;
   /** 结束占着服务端口的进程（端口冲突时由用户确认后调用） */
   killPortOwner(): Promise<ServiceStatus>;
+  /** ComfyUI 进程输出（控制台「运行日志」） */
   getServiceLogs(): Promise<LogLine[]>;
   clearServiceLogs(): Promise<void>;
+  /** 主进程/任务操作（控制台「启动器日志」） */
+  getLauncherLogs(): Promise<LogLine[]>;
+  clearLauncherLogs(): Promise<void>;
 
   /* ---- 任务 ---- */
   listJobs(): Promise<JobSnapshot[]>;
@@ -792,6 +818,7 @@ export interface LauncherApi {
 
   /* ---- 事件订阅 ---- */
   onLog(cb: (line: LogLine) => void): Unsubscribe;
+  onLauncherLog(cb: (line: LogLine) => void): Unsubscribe;
   onServiceStatus(cb: (status: ServiceStatus) => void): Unsubscribe;
   onJobEvent(cb: (event: JobEvent) => void): Unsubscribe;
   /** 托盘「设置」等：主进程要求切到某个页面 */

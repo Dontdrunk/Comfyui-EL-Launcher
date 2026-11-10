@@ -1,4 +1,12 @@
-import { Check, Download, ExternalLink, Plug, RefreshCw, Search } from "lucide";
+import {
+  Check,
+  Download,
+  ExternalLink,
+  Package,
+  Plug,
+  RefreshCw,
+  Search,
+} from "lucide";
 import {
   useCallback,
   useEffect,
@@ -734,14 +742,7 @@ export default function Nodes(): React.JSX.Element {
             value={tab}
             onChange={setTab}
             options={[
-              // 首屏还在读目录时不要显示「已安装 0」，那会让人以为插件没了
-              {
-                value: "installed",
-                label:
-                  loading && installed.length === 0
-                    ? "已安装 …"
-                    : `已安装 ${installed.length}`,
-              },
+              { value: "installed", label: "已安装" },
               { value: "search", label: "插件安装" },
             ]}
           />
@@ -778,10 +779,7 @@ export default function Nodes(): React.JSX.Element {
         {/* ══════════ 已安装 ══════════ */}
         {tab === "installed" &&
           (loading && installed.length === 0 ? (
-            <PageLoading
-              label="正在读取插件目录…"
-              hint="顺便检查每个插件的 Python 依赖是否装齐。"
-            />
+            <PageLoading label="正在读取插件目录…" />
           ) : installed.length === 0 ? (
             <Empty
               icon={Plug}
@@ -1541,7 +1539,9 @@ function DepCell({
           open(e.currentTarget);
         }}
       >
-        <span className={`depstatus depstatus--${visual}`} aria-hidden />
+        <span className={`depstatus depstatus--${visual}`} aria-hidden>
+          <Icon icon={Package} size={16} strokeWidth={1.75} />
+        </span>
       </button>
 
       {anchor && detail && (

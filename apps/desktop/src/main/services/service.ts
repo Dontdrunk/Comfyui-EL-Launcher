@@ -3,9 +3,10 @@ import type { ChildProcess } from "node:child_process";
 import { get as httpGet } from "node:http";
 import { createServer } from "node:net";
 
-import { launchArgs } from "@explorer-launcher/electron";
+import { classifyLogLevel, launchArgs } from "@explorer-launcher/electron";
 import type {
   LaunchDefaults,
+  LogLevel,
   LogLine,
   LogStream,
   PortOwner,
@@ -47,9 +48,16 @@ class ServiceManager {
   /** 就绪探测与访问地址用的主机；开远程时可能是具体网卡 IP */
   private host = "127.0.0.1";
 
-  private lines: LogLine[] = [];
-  private seq = 0;
+  /* 两条独立日志流：runtime = ComfyUI 进程输出；launcher = 主进程/任务操作 */
+  private runtimeLines: LogLine[] = [];
+  private launcherLines: LogLine[] = [];
+  private runtimeSeq = 0;
+  private launcherSeq = 0;
+  /** 上一条的级别：traceback 的缩进续行继承它 */
+  private runtimePrevLevel: LogLevel = "info";
+  private launcherPrevLevel: LogLevel = "info";
   private readonly logListeners = new Set<(l: LogLine) => void>();
+  private readonly launcherListeners = new Set<(l: LogLine) => void>();
   private readonly statusListeners = new Set<(s: ServiceStatus) => void>();
   private readyTimer: NodeJS.Timeout | null = null;
   private readyDeadline = 0;
@@ -70,6 +78,12 @@ class ServiceManager {
     return () => this.logListeners.delete(cb);
   }
 
+  onLauncherLog(cb: (l: LogLine) => void): Unsubscribe {
+    this.launcherListeners.add(cb);
+
+    return () => this.launcherListeners.delete(cb);
+  }
+
   onStatus(cb: (s: ServiceStatus) => void): Unsubscribe {
     this.statusListeners.add(cb);
 
@@ -77,12 +91,21 @@ class ServiceManager {
   }
 
   getLogs(): LogLine[] {
-    return [...this.lines];
+    return [...this.runtimeLines];
+  }
+
+  getLauncherLogs(): LogLine[] {
+    return [...this.launcherLines];
   }
 
   clearLogs(): void {
-    this.lines = [];
-    this.seq = 0;
+    this.runtimeLines = [];
+    this.runtimeSeq = 0;
+  }
+
+  clearLauncherLogs(): void {
+    this.launcherLines = [];
+    this.launcherSeq = 0;
   }
 
   status(): ServiceStatus {
@@ -104,31 +127,62 @@ class ServiceManager {
     };
   }
 
+  /** 追加一行 ComfyUI 进程输出 */
   private log(text: string, stream: LogStream = "system"): void {
-    const line: LogLine = {
-      seq: ++this.seq,
-      ts: Date.now(),
-      stream,
-      text: stripAnsi(text),
-    };
-
-    this.lines.push(line);
-
-    if (this.lines.length > MAX_SERVICE_LINES) {
-      this.lines.splice(0, this.lines.length - MAX_SERVICE_LINES);
-    }
-
-    for (const cb of this.logListeners) {
-      cb(line);
-    }
+    this.push("runtime", text, stream);
   }
 
   /**
-   * 把非 ComfyUI 进程的输出也写进同一条日志流。
-   * 任务系统（git clone / pip install / 版本切换）用它，控制台页才能看到完整记录。
+   * 主进程/任务操作（环境探测、插件安装更新、版本切换等）。
+   * 与 ComfyUI 进程输出分开：控制台的「启动器日志」只看这一条流。
+   * level 由调用方在已知结果时显式传入（成功/取消/错误），否则按内容判定。
    */
-  logExternal(text: string, stream: LogStream = "system"): void {
-    this.log(text, stream);
+  logLauncher(
+    text: string,
+    stream: LogStream = "system",
+    level?: LogLevel
+  ): void {
+    this.push("launcher", text, stream, level);
+  }
+
+  private push(
+    scope: "runtime" | "launcher",
+    text: string,
+    stream: LogStream,
+    explicit?: LogLevel
+  ): void {
+    const previous =
+      scope === "runtime" ? this.runtimePrevLevel : this.launcherPrevLevel;
+    const clean = stripAnsi(text);
+    const level = classifyLogLevel(clean, explicit, previous);
+
+    if (scope === "runtime") {
+      this.runtimePrevLevel = level;
+    } else {
+      this.launcherPrevLevel = level;
+    }
+
+    const line: LogLine = {
+      seq: scope === "runtime" ? ++this.runtimeSeq : ++this.launcherSeq,
+      ts: Date.now(),
+      stream,
+      level,
+      text: clean,
+    };
+    const target = scope === "runtime" ? this.runtimeLines : this.launcherLines;
+
+    target.push(line);
+
+    if (target.length > MAX_SERVICE_LINES) {
+      target.splice(0, target.length - MAX_SERVICE_LINES);
+    }
+
+    const listeners =
+      scope === "runtime" ? this.logListeners : this.launcherListeners;
+
+    for (const cb of listeners) {
+      cb(line);
+    }
   }
 
   private pushStatus(): void {
@@ -179,7 +233,7 @@ class ServiceManager {
 
       // 本机这套 ComfyUI 还活着（上次启动器被强杀留下的）：直接接管，不再重复起一份
       if (live && owner?.isOurComfy) {
-        this.log(
+        this.logLauncher(
           "[启动器] 端口上已经有一个本机 ComfyUI 在运行，直接接管，不再重复启动"
         );
         this.attachExternal(owner, cfg.port, this.host);
@@ -191,7 +245,7 @@ class ServiceManager {
       this.lastError = live
         ? `端口 ${cfg.port} 已被 ${who} 占用，而且这个端口上已经有一个能响应的 ComfyUI。可以直接打开它，或者结束该进程后重新启动。`
         : `端口 ${cfg.port} 已被 ${who} 占用。可以结束该进程后重新启动，或在设置里换个端口。`;
-      this.log(`[启动器] ${this.lastError}`, "stderr");
+      this.logLauncher(`[启动器] ${this.lastError}`, "stderr", "error");
       this.setState("error");
 
       return this.status();
@@ -202,13 +256,13 @@ class ServiceManager {
     const args = launchArgs(cfg);
     this.commandLine = `${paths.pythonExe} ${args.join(" ")}`;
 
-    this.log(`[启动器] 工作目录：${paths.root}`);
-    this.log(`[启动器] 命令：${this.commandLine}`);
+    this.logLauncher(`[启动器] 工作目录：${paths.root}`);
+    this.logLauncher(`[启动器] 命令：${this.commandLine}`);
 
     if (cfg.mode === "cpu") {
-      this.log("[启动器] 模式：CPU（速度很慢，仅用于排障）");
+      this.logLauncher("[启动器] 模式：CPU（速度很慢，仅用于排障）");
     } else {
-      this.log("[启动器] 模式：GPU");
+      this.logLauncher("[启动器] 模式：GPU");
     }
 
     try {
@@ -221,7 +275,7 @@ class ServiceManager {
     } catch (error) {
       this.state = "error";
       this.lastError = `无法启动进程：${error instanceof Error ? error.message : String(error)}`;
-      this.log(`[启动器] ${this.lastError}`, "stderr");
+      this.logLauncher(`[启动器] ${this.lastError}`, "stderr", "error");
       this.pushStatus();
 
       return this.status();
@@ -242,7 +296,7 @@ class ServiceManager {
 
     this.child.on("error", (err) => {
       this.lastError = `进程错误：${err.message}`;
-      this.log(`[启动器] ${this.lastError}`, "stderr");
+      this.logLauncher(`[启动器] ${this.lastError}`, "stderr", "error");
     });
 
     this.child.on("close", (code) => {
@@ -254,14 +308,14 @@ class ServiceManager {
       this.stopReadyPoll();
 
       if (this.state === "stopping") {
-        this.log("[启动器] ComfyUI 已停止。");
+        this.logLauncher("[启动器] ComfyUI 已停止。");
         this.setState("stopped");
       } else if (code === 0) {
-        this.log("[启动器] ComfyUI 进程已退出（退出码 0）。");
+        this.logLauncher("[启动器] ComfyUI 进程已退出（退出码 0）。");
         this.setState("stopped");
       } else {
         this.lastError = `ComfyUI 异常退出，退出码 ${code}`;
-        this.log(`[启动器] ${this.lastError}`, "stderr");
+        this.logLauncher(`[启动器] ${this.lastError}`, "stderr", "error");
         this.setState("error");
       }
     });
@@ -285,7 +339,7 @@ class ServiceManager {
     }
 
     this.setState("stopping");
-    this.log("[启动器] 正在停止 ComfyUI…");
+    this.logLauncher("[启动器] 正在停止 ComfyUI…");
 
     /* 接管来的进程没有 close 事件可等：taskkill 之后自己收拾状态 */
     if (!this.child) {
@@ -298,7 +352,7 @@ class ServiceManager {
       this.exitedAt = Date.now();
       this.portOwner = null;
       this.portLive = false;
-      this.log("[启动器] 已结束接管的 ComfyUI。");
+      this.logLauncher("[启动器] 已结束接管的 ComfyUI。");
       this.setState("stopped");
 
       return this.status();
@@ -367,7 +421,7 @@ class ServiceManager {
       return this.status();
     }
 
-    this.log(
+    this.logLauncher(
       `[启动器] 检测到上次留下的 ComfyUI 仍在运行，直接接管（PID ${owner.pid}）`
     );
     this.attachExternal(owner, cfg.port, this.host);
@@ -388,7 +442,7 @@ class ServiceManager {
       (await findPortOwner(this.port, settingsStore.get().comfyRoot));
 
     if (target) {
-      this.log(
+      this.logLauncher(
         `[启动器] 正在结束占用端口 ${this.port} 的进程：${target.name}（PID ${target.pid}）`
       );
       killTree(target.pid);
@@ -424,7 +478,7 @@ class ServiceManager {
     this.portOwner = owner;
     this.portLive = true;
     this.commandLine = owner.commandLine;
-    this.log(
+    this.logLauncher(
       `[启动器] 已接管端口 ${port} 上的 ComfyUI（PID ${owner.pid}），点「停止」可以直接关掉它`
     );
     this.watchExternal();
@@ -459,7 +513,7 @@ class ServiceManager {
         this.pid = null;
         this.ready = false;
         this.exitedAt = Date.now();
-        this.log("[启动器] 接管的 ComfyUI 已经不在线了。");
+        this.logLauncher("[启动器] 接管的 ComfyUI 已经不在线了。");
         this.setState("stopped");
       });
     }, 4000);
@@ -503,7 +557,7 @@ class ServiceManager {
     const m = /To see the GUI go to:\s*(https?:\/\/\S+)/i.exec(line);
 
     if (m) {
-      this.log(`[启动器] 检测到服务地址：${m[1]}`);
+      this.logLauncher(`[启动器] 检测到服务地址：${m[1]}`);
     }
   }
 
@@ -521,7 +575,7 @@ class ServiceManager {
       if (await probeSystemStats(this.host, this.port)) {
         this.ready = true;
         this.bootMs = this.startedAt ? Date.now() - this.startedAt : null;
-        this.log(
+        this.logLauncher(
           `[启动器] ComfyUI 已就绪：http://${this.host}:${this.port}${
             this.bootMs
               ? `（启动耗时 ${(this.bootMs / 1000).toFixed(1)}s）`
@@ -535,7 +589,7 @@ class ServiceManager {
 
       if (Date.now() > this.readyDeadline) {
         this.lastError = `等待服务就绪超时（${READY_TIMEOUT_MS / 1000} 秒），请查看日志排查。`;
-        this.log(`[启动器] ${this.lastError}`, "stderr");
+        this.logLauncher(`[启动器] ${this.lastError}`, "stderr", "error");
         this.setState("error");
 
         return;

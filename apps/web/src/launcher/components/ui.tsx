@@ -2,7 +2,7 @@ import { CircleAlert, CircleCheck, Info, LoaderCircle, X } from "lucide";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { LogLine } from "@explorer-launcher/electron";
+import type { LogLevel, LogLine } from "@explorer-launcher/electron";
 
 import { Icon } from "./Icon";
 
@@ -288,16 +288,20 @@ export function Spinner({ label }: { label?: ReactNode }): React.JSX.Element {
 /* ── 页面级加载态：各页面首屏未就绪时统一用它，避免先闪一下「空列表」 ── */
 export function PageLoading({
   label = "加载中…",
-  hint,
+  overlay = false,
 }: {
   label?: string;
-  hint?: ReactNode;
+  /** 盖在已有页面骨架之上：整块内容区居中，不进普通文档流 */
+  overlay?: boolean;
 }): React.JSX.Element {
   return (
-    <div className="pageload" role="status" aria-live="polite">
+    <div
+      className={overlay ? "pageload pageload--overlay" : "pageload"}
+      role="status"
+      aria-live="polite"
+    >
       <span className="pageload__ring" aria-hidden />
       <span className="pageload__label">{label}</span>
-      {hint ? <span className="pageload__hint">{hint}</span> : null}
     </div>
   );
 }
@@ -353,6 +357,12 @@ export function Progress({
 }
 
 /* ── 日志终端 ── */
+/** 只有警告和错误显示级别标签；info/debug/success 只靠色条/正文 */
+const LEVEL_BADGE: Partial<Record<LogLevel, string>> = {
+  warn: "WARN",
+  error: "ERROR",
+};
+
 function timeOf(ts: number): string {
   const d = new Date(ts);
   const p = (n: number, w = 2): string => String(n).padStart(w, "0");
@@ -412,8 +422,9 @@ export function Terminal({
         lines.map((l, i) => (
           <div
             key={`${l.seq}-${i}`}
-            className={`terminal__line terminal__line--${l.stream}`}
+            className={`terminal__line terminal__line--${l.level}`}
           >
+            <span className="terminal__level">{LEVEL_BADGE[l.level]}</span>
             <span className="terminal__ts">{timeOf(l.ts)}</span>
             <span className="terminal__text">{l.text}</span>
           </div>

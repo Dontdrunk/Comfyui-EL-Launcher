@@ -1,4 +1,4 @@
-import type { BrowserWindow } from "electron";
+import type { BrowserWindow, OpenDialogOptions } from "electron";
 import { dialog, ipcMain, shell } from "electron";
 
 import { IPC } from "@explorer-launcher/electron";
@@ -66,22 +66,22 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   ipcMain.handle(
     IPC.dialogPickDirectory,
-    async (_e, defaultPath?: string): Promise<string | null> => {
+    async (
+      _e,
+      defaultPath?: string,
+      title?: string
+    ): Promise<string | null> => {
       const win = getWindow();
+      const options: OpenDialogOptions = {
+        title: title || "选择目录",
+        defaultPath: defaultPath || undefined,
+        properties: ["openDirectory"],
+        buttonLabel: "选择此目录",
+      };
 
       const result = win
-        ? await dialog.showOpenDialog(win, {
-            title: "选择 ComfyUI 便携版根目录",
-            defaultPath: defaultPath || undefined,
-            properties: ["openDirectory"],
-            buttonLabel: "选择此目录",
-          })
-        : await dialog.showOpenDialog({
-            title: "选择 ComfyUI 便携版根目录",
-            defaultPath: defaultPath || undefined,
-            properties: ["openDirectory"],
-            buttonLabel: "选择此目录",
-          });
+        ? await dialog.showOpenDialog(win, options)
+        : await dialog.showOpenDialog(options);
 
       if (result.canceled || result.filePaths.length === 0) {
         return null;
@@ -94,14 +94,42 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   ipcMain.handle(
     IPC.envCheck,
-    async (_e, root?: string): Promise<EnvLayout> =>
-      await checkLayout(pickRoot(root))
+    async (_e, root?: string): Promise<EnvLayout> => {
+      const layout = await checkLayout(pickRoot(root));
+      const errors = layout.issues.filter((i) => i.level === "error").length;
+      const warnings = layout.issues.filter((i) => i.level === "warn").length;
+
+      serviceManager.logLauncher(
+        layout.valid
+          ? `[环境] 目录检查通过：${layout.root}`
+          : `[环境] 目录检查未通过：${layout.root}（${errors} 个错误${
+              warnings > 0 ? `、${warnings} 个警告` : ""
+            }）`,
+        "system",
+        layout.valid ? "info" : errors > 0 ? "error" : "warn"
+      );
+
+      return layout;
+    }
   );
 
   ipcMain.handle(
     IPC.envProbeRuntime,
-    async (_e, root?: string): Promise<RuntimeInfo> =>
-      await probeRuntime(pickRoot(root))
+    async (_e, root?: string): Promise<RuntimeInfo> => {
+      const info = await probeRuntime(pickRoot(root));
+
+      serviceManager.logLauncher(
+        info.ok
+          ? `[环境] 运行时探测：Python ${info.pythonVersion ?? "未知"} · Torch ${info.torchVersion ?? "未知"} · CUDA ${
+              info.cudaAvailable ? (info.cudaVersion ?? "可用") : "不可用"
+            }`
+          : `[环境] 运行时探测失败：${info.error ?? "未知错误"}`,
+        "system",
+        info.ok ? "info" : "error"
+      );
+
+      return info;
+    }
   );
 
   ipcMain.handle(
@@ -133,6 +161,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle(IPC.serviceLogs, async () => serviceManager.getLogs());
   ipcMain.handle(IPC.serviceLogsClear, async () => {
     serviceManager.clearLogs();
+  });
+  ipcMain.handle(IPC.launcherLogs, async () =>
+    serviceManager.getLauncherLogs()
+  );
+  ipcMain.handle(IPC.launcherLogsClear, async () => {
+    serviceManager.clearLauncherLogs();
   });
 
   /* ────────── 任务 ────────── */
@@ -240,6 +274,10 @@ export function wireEventForwarding(
     send(IPC.evtLog, line);
   });
 
+  const offLauncherLog = serviceManager.onLauncherLog((line) => {
+    send(IPC.evtLauncherLog, line);
+  });
+
   const offStatus = serviceManager.onStatus((status) => {
     send(IPC.evtServiceStatus, status);
   });
@@ -250,6 +288,7 @@ export function wireEventForwarding(
 
   return () => {
     offLog();
+    offLauncherLog();
     offStatus();
     offJob();
   };

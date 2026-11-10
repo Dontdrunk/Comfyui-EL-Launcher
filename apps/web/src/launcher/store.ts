@@ -53,7 +53,10 @@ interface AppState {
   runtime: RuntimeInfo | null;
   runtimeLoading: boolean;
   service: ServiceStatus | null;
+  /** ComfyUI 进程输出 */
   logs: LogLine[];
+  /** 主进程/任务操作（装插件、切版本、环境探测等） */
+  launcherLogs: LogLine[];
   jobs: JobSnapshot[];
   toasts: Toast[];
 
@@ -64,6 +67,7 @@ interface AppState {
   startService: (override?: Partial<LaunchDefaults>) => Promise<void>;
   stopService: () => Promise<void>;
   clearLogs: () => Promise<void>;
+  clearLauncherLogs: () => Promise<void>;
   patchSettings: (patch: Partial<AppSettings>) => Promise<void>;
   toggleTheme: () => Promise<void>;
   pushToast: (text: string, tone?: Toast["tone"]) => void;
@@ -249,6 +253,7 @@ export const useApp = create<AppState>((set, get) => ({
   runtimeLoading: false,
   service: null,
   logs: [],
+  launcherLogs: [],
   jobs: [],
   toasts: [],
 
@@ -281,6 +286,13 @@ export const useApp = create<AppState>((set, get) => ({
               next.length > MAX_LOG_LINES ? next.slice(-MAX_LOG_LINES) : next,
           });
         });
+        launcher.onLauncherLog((line) => {
+          const next = [...get().launcherLogs, line];
+          set({
+            launcherLogs:
+              next.length > MAX_LOG_LINES ? next.slice(-MAX_LOG_LINES) : next,
+          });
+        });
         launcher.onServiceStatus((status) => {
           set({ service: status });
         });
@@ -293,10 +305,11 @@ export const useApp = create<AppState>((set, get) => ({
         });
       }
 
-      const [settings, service, logs, jobs] = await Promise.all([
+      const [settings, service, logs, launcherLogs, jobs] = await Promise.all([
         launcher.getSettings(),
         launcher.getServiceStatus(),
         launcher.getServiceLogs(),
+        launcher.getLauncherLogs(),
         launcher.listJobs(),
       ]);
 
@@ -305,6 +318,7 @@ export const useApp = create<AppState>((set, get) => ({
         settings,
         service,
         logs,
+        launcherLogs,
         jobs: mergeJobLists(state.jobs, jobs),
         booted: true,
         bootError: null,
@@ -377,6 +391,11 @@ export const useApp = create<AppState>((set, get) => ({
   async clearLogs() {
     await api().clearServiceLogs();
     set({ logs: [] });
+  },
+
+  async clearLauncherLogs() {
+    await api().clearLauncherLogs();
+    set({ launcherLogs: [] });
   },
 
   async patchSettings(patch) {

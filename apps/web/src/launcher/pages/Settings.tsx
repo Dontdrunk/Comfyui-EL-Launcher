@@ -68,7 +68,10 @@ export default function Settings(): React.JSX.Element {
   };
 
   const pickRoot = async (): Promise<void> => {
-    const picked = await window.launcher.pickDirectory(root);
+    const picked = await window.launcher.pickDirectory(
+      root,
+      "选择 ComfyUI 便携版根目录"
+    );
 
     if (!picked) {
       return;

@@ -412,10 +412,7 @@ export default function Packages(): React.JSX.Element {
           {packages.length === 0 ? (
             <div className="plugin-page__body">
               {loading ? (
-                <PageLoading
-                  label="正在读取已安装的包…"
-                  hint="读取 python_embeded 里的 site-packages。"
-                />
+                <PageLoading label="正在读取已安装的包…" />
               ) : (
                 <Empty
                   icon={Package}

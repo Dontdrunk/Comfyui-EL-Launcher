@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 
+import { classifyLogLevel } from "@explorer-launcher/electron";
 import type {
   JobEvent,
   JobSnapshot,
   JobStatus,
+  LogLevel,
   LogLine,
   LogStream,
   Unsubscribe,
@@ -24,8 +26,8 @@ const MAX_FINISHED_JOBS = 30;
 export interface JobContext {
   id: string;
   signal: AbortSignal;
-  /** 追加一行日志 */
-  log(text: string, stream?: LogStream): void;
+  /** 追加一行日志；已知结果时显式传 level，否则按内容判定 */
+  log(text: string, stream?: LogStream, level?: LogLevel): void;
   /** 设置进度，null 表示不确定进度 */
   progress(percent: number | null): void;
 }
@@ -80,13 +82,13 @@ class JobManager {
     this.jobs.set(rec.id, rec);
     this.gc();
     this.emit({ jobId: rec.id, kind: "created", snapshot: this.snapshot(rec) });
-    serviceManager.logExternal(`[任务] 开始：${title}`);
+    serviceManager.logLauncher(`[任务] 开始：${title}`, "system", "info");
 
     const ctx: JobContext = {
       id: rec.id,
       signal: rec.controller.signal,
-      log: (text, stream = "system") => {
-        this.append(rec, text, stream);
+      log: (text, stream, level) => {
+        this.append(rec, text, stream ?? "system", level);
       },
       progress: (percent) => {
         rec.percent = percent;
@@ -112,8 +114,21 @@ class JobManager {
     }
   }
 
-  private append(rec: JobRecord, text: string, stream: LogStream): void {
-    const line: LogLine = { seq: ++rec.seq, ts: Date.now(), stream, text };
+  private append(
+    rec: JobRecord,
+    text: string,
+    stream: LogStream,
+    explicit?: LogLevel
+  ): void {
+    const previous = rec.lines.at(-1)?.level;
+    const level = classifyLogLevel(text, explicit, previous);
+    const line: LogLine = {
+      seq: ++rec.seq,
+      ts: Date.now(),
+      stream,
+      level,
+      text,
+    };
     rec.lines.push(line);
 
     if (rec.lines.length > MAX_LINES_PER_JOB) {
@@ -124,7 +139,7 @@ class JobManager {
     const visible = text.trim();
 
     if (visible) {
-      serviceManager.logExternal(visible, stream);
+      serviceManager.logLauncher(visible, stream, level);
     }
   }
 
@@ -143,12 +158,21 @@ class JobManager {
       kind: "finished",
       snapshot: this.snapshot(rec),
     });
-    serviceManager.logExternal(
+    const level: LogLevel =
+      status === "succeeded"
+        ? "success"
+        : status === "canceled"
+          ? "warn"
+          : "error";
+
+    serviceManager.logLauncher(
       status === "succeeded"
         ? `[任务] 完成：${rec.title}`
         : status === "canceled"
           ? `[任务] 已取消：${rec.title}`
-          : `[任务] 失败：${rec.title}${error ? ` — ${error}` : ""}`
+          : `[任务] 失败：${rec.title}${error ? ` — ${error}` : ""}`,
+      "system",
+      level
     );
   }
 

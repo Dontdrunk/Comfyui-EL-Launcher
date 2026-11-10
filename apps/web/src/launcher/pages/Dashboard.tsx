@@ -320,17 +320,6 @@ export default function Dashboard(): React.JSX.Element {
             <button
               type="button"
               className="btn"
-              disabled={!env?.root}
-              onClick={() =>
-                env?.root && void window.launcher.openPath(env.root)
-              }
-            >
-              <Icon icon={Folder} size={16} />
-              根目录
-            </button>
-            <button
-              type="button"
-              className="btn"
               disabled={!env?.customNodesDir}
               onClick={() =>
                 env?.customNodesDir &&
@@ -339,6 +328,17 @@ export default function Dashboard(): React.JSX.Element {
             >
               <Icon icon={Folder} size={16} />
               插件目录
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={!env?.inputDir}
+              onClick={() =>
+                env?.inputDir && void window.launcher.openPath(env.inputDir)
+              }
+            >
+              <Icon icon={Folder} size={16} />
+              输入目录
             </button>
             <button
               type="button"

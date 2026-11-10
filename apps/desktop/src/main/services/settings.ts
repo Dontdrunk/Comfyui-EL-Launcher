@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 
 import { app } from "electron";
 
+import { normalizeModelShortcuts } from "@explorer-launcher/electron";
 import type {
   AppSettings,
   LaunchDefaults,
@@ -93,6 +94,7 @@ function defaultSettings(): AppSettings {
     // 深拷贝内置预设，避免运行期修改污染模块常量
     presets: BUILTIN_PRESETS.map((p) => ({ ...p, launch: { ...p.launch } })),
     activePresetId: "standard",
+    modelShortcuts: [],
   };
 }
 
@@ -176,6 +178,10 @@ function merge(base: AppSettings, patch: Partial<AppSettings>): AppSettings {
   } else if (typeof patch.activePresetId === "string") {
     const exists = out.presets.some((p) => p.id === patch.activePresetId);
     out.activePresetId = exists ? patch.activePresetId : null;
+  }
+
+  if (patch.modelShortcuts !== undefined) {
+    out.modelShortcuts = normalizeModelShortcuts(patch.modelShortcuts);
   }
 
   if (patch.launch) {

@@ -1,0 +1,162 @@
+/* 模型管理页「快捷访问」：发丝线卡片，沿用面板的直角与 1px 分隔 */
+.quickbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: var(--sp-4) 0 var(--sp-3);
+}
+
+.quickbar__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.quickbar__head .section-title {
+  flex: 1;
+  margin: 0;
+}
+
+.quickbar__empty {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+}
+
+.quickbar__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--sp-2);
+}
+
+.quickcard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--stroke);
+  background: var(--bg-surface);
+}
+
+.quickcard--dragging {
+  opacity: 0.45;
+}
+
+/* 拖拽落点：在目标卡片左侧或右侧画一条 2px 强调线 */
+.quickcard--drop-before::before,
+.quickcard--drop-after::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 2px;
+  background: var(--accent-line);
+  z-index: 1;
+}
+
+.quickcard--drop-before::before {
+  left: -1px;
+}
+
+.quickcard--drop-after::after {
+  right: -1px;
+}
+
+.quickcard__grip {
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+  padding-left: 8px;
+  color: var(--fg-faint);
+  cursor: grab;
+}
+
+.quickcard__grip:active {
+  cursor: grabbing;
+}
+
+.quickcard__open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-2) 30px var(--sp-2) 6px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.quickcard__open:hover {
+  background: var(--bg-hover);
+}
+
+.quickcard__icon {
+  display: flex;
+  flex: 0 0 auto;
+  color: var(--fg-muted);
+}
+
+.quickcard__text,
+.quickcard__edit {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.quickcard__edit {
+  padding: var(--sp-2) 30px var(--sp-2) 0;
+}
+
+.quickcard__rename {
+  width: 100%;
+  min-width: 0;
+  padding: 1px 4px;
+  border: 1px solid var(--accent-line);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--fs-sm);
+  outline: none;
+}
+
+.quickcard__name {
+  overflow: hidden;
+  color: var(--fg);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.quickcard__path {
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.quickcard__remove {
+  position: absolute;
+  top: 50%;
+  right: var(--sp-2);
+  display: grid;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transform: translateY(-50%);
+  place-items: center;
+}
+
+.quickcard__remove:hover {
+  color: var(--danger-text);
+}

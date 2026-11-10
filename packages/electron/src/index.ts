@@ -6,6 +6,10 @@
  */
 export * from "./dep-status.mjs";
 
+export * from "./log-level.mjs";
+
+export * from "./model-shortcuts.mjs";
+
 export * from "./ipc.ts";
 
 export * from "./launch-command.ts";

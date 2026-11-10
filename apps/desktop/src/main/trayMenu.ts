@@ -15,10 +15,10 @@ export interface TrayMenuActions {
 
 /**
  * 系统托盘菜单按文字宽度收缩，「打开」两个字会把气泡收得很窄，两侧留白加不进去。
- * 这里改成贴在图标上方的小窗，宽度固定，文字居中，两边留出同样的空白。
+ * 这里改成贴在图标上方的小窗：固定宽度、文字居中，两侧只留一窄条留白。
  */
-const MENU_WIDTH = 148;
-const MENU_HEIGHT = 132;
+const MENU_WIDTH = 116;
+const MENU_HEIGHT = 128;
 
 let menuWindow: BrowserWindow | null = null;
 let allowBlurClose = false;
@@ -39,7 +39,7 @@ function menuHtml(dark: boolean): string {
   html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
   body {
     box-sizing: border-box;
-    padding: 10px;
+    padding: 8px;
     font: 14px/1.2 "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
     user-select: none;
   }
@@ -50,7 +50,7 @@ function menuHtml(dark: boolean): string {
     flex-direction: column;
     justify-content: center;
     gap: 2px;
-    padding: 6px;
+    padding: 5px;
     border-radius: 8px;
     background: ${bg};
     color: ${fg};
@@ -60,7 +60,7 @@ function menuHtml(dark: boolean): string {
     flex: 1;
     border: 0;
     margin: 0;
-    padding: 0 28px;
+    padding: 0 16px;
     border-radius: 4px;
     background: transparent;
     color: inherit;

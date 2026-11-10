@@ -85,6 +85,8 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* 加载态浮层（.pageload--overlay）相对内容区定位 */
+  position: relative;
 }
 
 /* ══════════════════ 宽屏自适应 ══════════════════
@@ -301,12 +303,12 @@ body {
 }
 
 /*
- * 「依赖」列的状态指示器：柔和底色 + 高亮内核，四档语义色。
- *   ok    = 依赖全部就绪
- *   warn  = 部分缺失
- *   error = 一个都没装上
- *   none  = 未声明依赖 / 检查失败（空心，不抢注意力）
- *   busy  = 正在检查（外圈旋转，和全站其它加载指示器同一套动效）
+ * 「依赖」列的状态指示器：一个包图标（lucide Package），颜色分档。
+ *   ok    = 依赖全部就绪 / 未声明依赖（绿）
+ *   warn  = 部分缺失（黄）
+ *   error = 一个都没装上（红）
+ *   none  = 检查失败（灰）
+ *   busy  = 正在检查（蓝，脉冲，和状态灯同一套动效）
  */
 .rowlink--dep {
   display: inline-flex;
@@ -318,68 +320,42 @@ body {
 
 .depstatus {
   --tone: var(--fg-muted);
-  --tone-soft: color-mix(in srgb, var(--fg-muted) 14%, transparent);
-  position: relative;
   display: inline-grid;
   place-items: center;
   width: 18px;
   height: 18px;
-  border-radius: 50%;
-  background: var(--tone-soft);
-  transition: transform var(--dur-fast);
-}
-
-.depstatus::after {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--tone);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--tone) 55%, transparent);
+  color: var(--tone);
+  transition:
+    color var(--dur-fast),
+    transform var(--dur-fast);
 }
 
 .rowlink--dep:hover .depstatus {
-  transform: scale(1.12);
+  transform: scale(1.1);
 }
 
 .depstatus--ok {
-  --tone: var(--ok);
-  --tone-soft: var(--ok-soft);
+  --tone: var(--ok-text);
 }
 
 .depstatus--warn {
-  --tone: var(--warn);
-  --tone-soft: var(--warn-soft);
+  --tone: var(--warn-text);
 }
 
 .depstatus--error {
-  --tone: var(--danger);
-  --tone-soft: var(--danger-soft);
+  --tone: var(--danger-text);
 }
 
 .depstatus--none {
-  background: transparent;
+  --tone: var(--fg-muted);
 }
 
-.depstatus--none::after {
-  background: transparent;
-  border: 1.5px solid color-mix(in srgb, var(--fg-muted) 45%, transparent);
-  box-shadow: none;
+.depstatus--busy {
+  --tone: var(--accent-line);
 }
 
-.depstatus--busy::after {
-  display: none;
-}
-
-.depstatus--busy::before {
-  content: "";
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--fg-muted) 18%, transparent);
-  border-top-color: var(--accent-line);
-  animation: spin 0.8s linear infinite;
+.depstatus--busy .ic {
+  animation: pulse 1.1s ease-in-out infinite;
 }
 
 .deppop__err {
@@ -1604,6 +1580,7 @@ body {
 }
 
 .terminal__line {
+  position: relative;
   display: flex;
   gap: var(--sp-2);
   padding: 0 var(--sp-3);
@@ -1626,11 +1603,50 @@ body {
   min-width: 0;
 }
 
-.terminal__line--stderr .terminal__text {
-  color: var(--danger-bright);
+/*
+ * 级别配色：颜色只看 level，不看 stdout/stderr。
+ * 普通行保持正文色；警告只给左侧色条 + 黄色标签；
+ * 错误才整行变红；debug 弱化。左侧 2px 色条与仪表台的发丝线同一语言。
+ */
+.terminal__line--warn .terminal__level {
+  color: var(--warn-text);
 }
-.terminal__line--system .terminal__text {
-  color: var(--accent-hover);
+.terminal__line--error .terminal__level {
+  color: var(--danger-text);
+}
+.terminal__line--debug .terminal__text {
+  color: var(--fg-dim);
+}
+.terminal__line--error .terminal__text {
+  color: var(--danger-text);
+}
+
+.terminal__line--warn::before,
+.terminal__line--error::before,
+.terminal__line--success::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: 2px;
+}
+
+.terminal__line--warn::before {
+  background: var(--warn-text);
+}
+.terminal__line--error::before {
+  background: var(--danger-text);
+}
+.terminal__line--success::before {
+  background: var(--ok-text);
+}
+
+.terminal__level {
+  flex: 0 0 38px;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--fg-muted);
 }
 
 .terminal__empty {
@@ -1679,16 +1695,27 @@ body {
   color: var(--fg-dim);
 }
 
-/* 页面级加载：所有页面首屏统一用它（转圈 + 一句说明），别先闪一个空列表 */
+/* 页面级加载：所有页面首屏统一用它（转圈 + 一句说明），别先闪一个空列表。
+ * 吃掉父容器的高度（整页占位、fill 面板或普通块），指示器才落在内容区正中。 */
 .pageload {
   display: flex;
+  flex: 1 0 auto;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--sp-3);
-  min-height: 220px;
+  min-height: 100%;
   padding: var(--sp-8) var(--sp-4);
   text-align: center;
+}
+
+/* 页面骨架已经立起来时，让转圈浮在整个内容区正中，位置不随骨架变化 */
+.pageload--overlay {
+  position: absolute;
+  inset: 0;
+  flex: none;
+  min-height: 0;
+  pointer-events: none;
 }
 
 .pageload__ring {
@@ -1703,13 +1730,6 @@ body {
 .pageload__label {
   font-size: var(--fs-sm);
   color: var(--fg);
-}
-
-.pageload__hint {
-  max-width: 400px;
-  font-size: var(--fs-xs);
-  color: var(--fg-muted);
-  line-height: 1.7;
 }
 
 .empty {
@@ -2379,6 +2399,11 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
+}
+
+/* 目录已设为快捷：只把对勾染成绿色，按钮本身保持低调 */
+.mtree__shortcut-tick {
+  color: var(--ok-text);
 }
 
 .mtree__empty {

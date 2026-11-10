@@ -1,12 +1,23 @@
-import { ChevronRight, File, Folder, FolderOpen, Search, Trash2 } from "lucide";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Check,
+  ChevronRight,
+  File,
+  Folder,
+  FolderOpen,
+  Pin,
+  Search,
+  Trash2,
+} from "lucide";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { MAX_MODEL_SHORTCUTS } from "@explorer-launcher/electron";
 import type {
   DiskProbe,
   ModelNode,
   ModelScanReport,
 } from "@explorer-launcher/electron";
 
+import { ModelShortcuts } from "../../components/model-shortcuts";
 import { Icon } from "../components/Icon";
 import {
   Empty,
@@ -28,8 +39,17 @@ import { useApp } from "../store";
  * 删除一律走系统回收站。
  * ══════════════════════════════════════════════════════════ */
 
+/** 模型树里的相对路径 → 绝对路径（Windows 分隔符） */
+const modelAbsolutePath = (modelsDir: string, relative: string): string => {
+  const base = modelsDir.replace(/[\\/]+$/u, "");
+
+  return relative ? `${base}\\${relative.replaceAll("/", "\\")}` : base;
+};
+
 export default function Models(): React.JSX.Element {
   const settings = useApp((s) => s.settings);
+  const patchSettings = useApp((s) => s.patchSettings);
+  const pushToast = useApp((s) => s.pushToast);
   const root = settings?.comfyRoot;
 
   const [report, setReport] = useState<ModelScanReport | null>(null);
@@ -115,10 +135,54 @@ export default function Models(): React.JSX.Element {
     });
   };
 
-  const diskFree = probe?.diskFreeBytes ?? null;
+  /** 已设为快捷的目录路径（小写，Windows 不区分大小写） */
+  const shortcutPaths = useMemo(
+    () =>
+      new Set(
+        (settings?.modelShortcuts ?? []).map((shortcut) =>
+          shortcut.path.toLowerCase()
+        )
+      ),
+    [settings]
+  );
 
-  const folderCount =
-    report?.entries.filter((n) => n.kind === "dir").length ?? 0;
+  const toggleShortcut = async (node: ModelNode): Promise<void> => {
+    const modelsDir = report?.modelsDir;
+
+    if (!modelsDir) {
+      return;
+    }
+    const target = modelAbsolutePath(modelsDir, node.relative);
+    const key = target.toLowerCase();
+    const current = settings?.modelShortcuts ?? [];
+    const exists = current.some(
+      (shortcut) => shortcut.path.toLowerCase() === key
+    );
+
+    if (!exists && current.length >= MAX_MODEL_SHORTCUTS) {
+      pushToast(`最多能放 ${MAX_MODEL_SHORTCUTS} 个快捷目录`, "warn");
+
+      return;
+    }
+
+    try {
+      await patchSettings({
+        modelShortcuts: exists
+          ? current.filter((shortcut) => shortcut.path.toLowerCase() !== key)
+          : [...current, { path: target, name: node.name }],
+      });
+      pushToast(
+        exists ? `已取消快捷：${node.name}` : `已设为快捷：${node.name}`
+      );
+    } catch (error_) {
+      pushToast(
+        `快捷设置失败：${error_ instanceof Error ? error_.message : String(error_)}`,
+        "error"
+      );
+    }
+  };
+
+  const diskFree = probe?.diskFreeBytes ?? null;
 
   return (
     <>
@@ -134,7 +198,7 @@ export default function Models(): React.JSX.Element {
         </Notice>
       )}
 
-      <Readouts cols={3}>
+      <Readouts cols={2}>
         <Readout
           label="模型总占用"
           value={report ? formatBytes(report.totalSize) : "—"}
@@ -145,11 +209,6 @@ export default function Models(): React.JSX.Element {
                 ? "正在扫描"
                 : "—"
           }
-        />
-        <Readout
-          label="顶层文件夹"
-          value={report ? String(folderCount) : "—"}
-          hint="models 下的第一层"
         />
         <Readout
           label={`磁盘剩余${probe?.drive ? ` ${probe.drive}` : ""}`}
@@ -170,6 +229,8 @@ export default function Models(): React.JSX.Element {
           }
         />
       </Readouts>
+
+      <ModelShortcuts />
 
       <Panel
         fill
@@ -198,15 +259,17 @@ export default function Models(): React.JSX.Element {
                   onToggle={toggle}
                   root={root ?? ""}
                   onDelete={setDeleteTarget}
+                  modelsDir={report.modelsDir}
+                  shortcutKeys={shortcutPaths}
+                  onToggleShortcut={(node) => {
+                    void toggleShortcut(node);
+                  }}
                 />
               </div>
             </div>
           )
         ) : scanning || !scanned ? (
-          <PageLoading
-            label="正在扫描模型目录…"
-            hint="首次检查会统计每个文件夹的体积与文件数。"
-          />
+          <PageLoading label="正在扫描模型目录…" />
         ) : (
           <Empty
             title="没有可扫描的目录"
@@ -271,6 +334,9 @@ function ModelBranch({
   onToggle,
   root,
   onDelete,
+  modelsDir,
+  shortcutKeys,
+  onToggleShortcut,
 }: {
   nodes: ModelNode[];
   depth: number;
@@ -278,12 +344,21 @@ function ModelBranch({
   onToggle: (relative: string) => void;
   root: string;
   onDelete: (node: ModelNode) => void;
+  modelsDir: string;
+  /** 已设为快捷的绝对路径（小写） */
+  shortcutKeys: Set<string>;
+  onToggleShortcut: (node: ModelNode) => void;
 }): React.JSX.Element {
   return (
     <>
       {nodes.map((node) => {
         const expanded = node.kind === "dir" && open.has(node.relative);
         const pad = 8 + depth * 16;
+        const isShortcut =
+          node.kind === "dir" &&
+          shortcutKeys.has(
+            modelAbsolutePath(modelsDir, node.relative).toLowerCase()
+          );
 
         return (
           <div key={node.relative || node.name}>
@@ -333,6 +408,25 @@ function ModelBranch({
                   : formatRelative(node.mtime)}
               </span>
               <span className="mtree__actions">
+                {node.kind === "dir" && (
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    title={isShortcut ? "从快捷访问中移除" : "添加到快捷访问"}
+                    onClick={() => {
+                      onToggleShortcut(node);
+                    }}
+                  >
+                    <Icon
+                      className={
+                        isShortcut ? "mtree__shortcut-tick" : undefined
+                      }
+                      icon={isShortcut ? Check : Pin}
+                      size={12}
+                    />
+                    {isShortcut ? "已设为快捷" : "设为快捷"}
+                  </button>
+                )}
                 {node.kind === "file" && (
                   <>
                     <button
@@ -375,6 +469,9 @@ function ModelBranch({
                   onToggle={onToggle}
                   root={root}
                   onDelete={onDelete}
+                  modelsDir={modelsDir}
+                  shortcutKeys={shortcutKeys}
+                  onToggleShortcut={onToggleShortcut}
                 />
               ))}
           </div>

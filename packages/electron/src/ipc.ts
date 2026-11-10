@@ -20,6 +20,8 @@ export const IPC = {
   serviceKillPortOwner: "service:killPortOwner",
   serviceLogs: "service:logs",
   serviceLogsClear: "service:logsClear",
+  launcherLogs: "launcher:logs",
+  launcherLogsClear: "launcher:logsClear",
 
   /* ---- 任务 ---- */
   jobList: "job:list",
@@ -94,6 +96,7 @@ export const IPC = {
 
   /* ---- 主进程 → 渲染进程 推送 ---- */
   evtLog: "evt:log",
+  evtLauncherLog: "evt:launcherLog",
   evtServiceStatus: "evt:serviceStatus",
   evtJob: "evt:job",
   /** 托盘菜单等主进程发起的页面跳转，payload 为页面 id */

@@ -30,8 +30,6 @@ import {
   Notice,
   PageLoading,
   Panel,
-  Readout,
-  Readouts,
   Segmented,
   Spinner,
   Switch,
@@ -345,17 +343,6 @@ export default function Versions(): React.JSX.Element {
   const ledTone: "ok" | "warn" | "off" =
     verdict === "behind" ? "warn" : verdict === "offline" ? "off" : "ok";
 
-  const versionHint =
-    verdict === "behind"
-      ? `落后 ${newestTag} ${count(rel?.behind)} 个提交`
-      : verdict === "devAhead"
-        ? `未发版 · 领先 ${newestTag} ${count(rel?.ahead)} 个提交`
-        : verdict === "offline"
-          ? `未发版 · 领先 ${count(rel?.ahead)} / 落后 ${count(rel?.behind)}`
-          : state?.head?.tag
-            ? `tag ${state.head.tag}`
-            : "未发版";
-
   /**
    * 面板正在展示的那个版本：有更新时是最新 tag，否则就是当前所在的 tag。
    * 都不在时退回最新 tag（离线分叉状态下「更新日志」按钮仍能查最新发版的说明）。
@@ -497,13 +484,21 @@ export default function Versions(): React.JSX.Element {
 
   /* ── 渲染 ── */
 
-  /* 首屏：还没读到版本状态就先转圈，别先渲染一排「—」 */
+  /*
+   * 首屏：先把页面骨架立起来（和读到数据后的两段面板同构），
+   * 转圈浮在内容区正中；数据到达时只有面板内容变化，整页不会跳一下。
+   */
   if (!state && !listError && root) {
     return (
-      <PageLoading
-        label="正在读取版本信息…"
-        hint="读取本地 git 状态、提交历史与备份列表。"
-      />
+      <>
+        <Panel flush title={<Led tone="busy" label="正在检查版本…" />}>
+          {null}
+        </Panel>
+        <Panel flush fill>
+          {null}
+        </Panel>
+        <PageLoading overlay label="正在读取版本信息…" />
+      </>
     );
   }
 
@@ -535,35 +530,6 @@ export default function Versions(): React.JSX.Element {
           {fetchError}
         </Notice>
       )}
-
-      {/* ── 当前版本 ── */}
-      <div className="section-title">当前版本</div>
-      <Readouts cols={3}>
-        <Readout
-          label="ComfyUI 版本"
-          value={state?.head?.appVersion ?? "—"}
-          tone={verdict === "behind" || verdict === "offline" ? "warn" : "ok"}
-          hint={versionHint}
-        />
-        <Readout
-          label="提交"
-          value={state?.head?.shortCommit ?? "—"}
-          hint={state?.head?.date ? formatDateTime(state.head.date) : undefined}
-          small
-        />
-        <Readout
-          label="工作区"
-          value={
-            state ? (state.clean ? "干净" : `${state.dirtyCount} 处改动`) : "—"
-          }
-          tone={state ? (state.clean ? "ok" : "warn") : "none"}
-          hint={
-            state && state.stashedCount > 0
-              ? `${state.stashedCount} 条 stash`
-              : "无 stash"
-          }
-        />
-      </Readouts>
 
       {/* ── 最新版本：内容直接进标题栏，不再多占一行面板体 ── */}
       {(update || updateLoading || state) && (

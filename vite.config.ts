@@ -83,6 +83,16 @@ export default defineConfig({
         },
       },
       {
+        // 模型页快捷卡片复用仪表台的样式类（.btn / .section-title），
+        // 以及同目录 model-shortcuts.css 里的自有类，均不是 Tailwind 工具类。
+        // 事件里的异步动作沿用 launcher 的 void 写法显式忽略 Promise。
+        files: ["apps/web/src/components/model-shortcuts.tsx"],
+        rules: {
+          "shadcn/no-unknown-classes": "off",
+          "eslint/no-void": "off",
+        },
+      },
+      {
         // 旧项目原样迁入的代码：格式化和类型检查照跑，风格类规则先豁免。
         // 这是搬运而不是重写——1.7 万行一次性改成 ultracite 风格不现实，
         // 但真正会出 BUG 的规则（hook 依赖、eqeqeq、未使用变量、类型错误）保持开启。

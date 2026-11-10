@@ -61,8 +61,8 @@ const api: LauncherApi = {
     ipcRenderer.invoke(IPC.settingsGet) as Promise<AppSettings>,
   patchSettings: async (patch) =>
     ipcRenderer.invoke(IPC.settingsPatch, patch) as Promise<AppSettings>,
-  pickDirectory: async (defaultPath) =>
-    ipcRenderer.invoke(IPC.dialogPickDirectory, defaultPath) as Promise<
+  pickDirectory: async (defaultPath, title) =>
+    ipcRenderer.invoke(IPC.dialogPickDirectory, defaultPath, title) as Promise<
       string | null
     >,
 
@@ -87,6 +87,10 @@ const api: LauncherApi = {
     ipcRenderer.invoke(IPC.serviceLogs) as Promise<LogLine[]>,
   clearServiceLogs: async () =>
     ipcRenderer.invoke(IPC.serviceLogsClear) as Promise<void>,
+  getLauncherLogs: async () =>
+    ipcRenderer.invoke(IPC.launcherLogs) as Promise<LogLine[]>,
+  clearLauncherLogs: async () =>
+    ipcRenderer.invoke(IPC.launcherLogsClear) as Promise<void>,
 
   /* ---- 任务 ---- */
   listJobs: async () =>
@@ -299,6 +303,7 @@ const api: LauncherApi = {
 
   /* ---- 事件订阅 ---- */
   onLog: (cb) => subscribe<LogLine>(IPC.evtLog, cb),
+  onLauncherLog: (cb) => subscribe<LogLine>(IPC.evtLauncherLog, cb),
   onServiceStatus: (cb) => subscribe<ServiceStatus>(IPC.evtServiceStatus, cb),
   onJobEvent: (cb) => subscribe<JobEvent>(IPC.evtJob, cb),
   onNavigate: (cb) => subscribe<string>(IPC.evtNavigate, cb),
