@@ -13,6 +13,10 @@ test-results
 .env
 .env.*
 
+# CON 是 Windows 保留设备名，MSYS 会把它解析成控制台设备；
+# 不加这行，git status 会永远挂着一条删不掉的未跟踪项。
+CON
+
 .DS_Store
 .idea
 .vscode/*
