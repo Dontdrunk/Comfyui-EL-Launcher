@@ -514,6 +514,21 @@ export interface NodeDepsReport {
   error: string | null;
 }
 
+/** 批量更新里失败的插件与原因 */
+export interface NodeUpdateFailure {
+  dirName: string;
+  error: string;
+}
+
+/**
+ * 批量更新的结果。成功与失败分开统计：只有成功列表长度时，
+ * 「全部失败」和「没有需要更新的」在界面上分不开。
+ */
+export interface NodeBulkUpdateResult {
+  updated: string[];
+  failed: NodeUpdateFailure[];
+}
+
 /** 单个插件的远端更新检查结果（需要联网，按需触发） */
 export interface NodeUpdateInfo {
   dirName: string;
@@ -713,7 +728,7 @@ export interface LauncherApi {
     root?: string
   ): Promise<InstalledNode[]>;
   updateNode(dirName: string, root?: string): Promise<OpResult<null>>;
-  updateAllNodes(root?: string): Promise<OpResult<string[]>>;
+  updateAllNodes(root?: string): Promise<OpResult<NodeBulkUpdateResult>>;
   uninstallNode(dirName: string, root?: string): Promise<OpResult<null>>;
   installNodeDeps(dirName: string, root?: string): Promise<OpResult<null>>;
   checkNodeDeps(root?: string): Promise<NodeDepsReport>;

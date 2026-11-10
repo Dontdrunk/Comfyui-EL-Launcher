@@ -5,6 +5,7 @@ import type {
   InstallResult,
   InstalledNode,
   NodeDepsDetail,
+  NodeBulkUpdateResult,
   NodeDepsReport,
   NodeReleases,
   NodeUpdateInfo,
@@ -13,6 +14,7 @@ import type {
 } from "@explorer-launcher/electron";
 
 import { runOp } from "./lib/runOp";
+import { bulkUpdateError } from "./services/nodeBulkUpdate.mjs";
 import {
   checkNodeDeps,
   checkNodeUpdates,
@@ -172,21 +174,27 @@ export function registerNodesIpc(): void {
 
   ipcMain.handle(
     IPC.nodesUpdateAll,
-    async (_e, root?: string): Promise<OpResult<string[]>> => {
+    async (_e, root?: string): Promise<OpResult<NodeBulkUpdateResult>> => {
       const target = pickRoot(root);
 
-      return await runOp(
-        "node-update-all",
-        "批量更新插件",
-        async (ctx) =>
-          await updateAllNodes(
-            target,
-            (stream, text) => {
-              ctx.log(text, stream);
-            },
-            ctx.signal
-          )
-      );
+      return await runOp("node-update-all", "批量更新插件", async (ctx) => {
+        const result = await updateAllNodes(
+          target,
+          (stream, text) => {
+            ctx.log(text, stream);
+          },
+          ctx.signal
+        );
+
+        // 有失败就让任务失败：返回 ok 会在任务中心打「完成」，把失败说成成功
+        const failure = bulkUpdateError(result);
+
+        if (failure !== null) {
+          throw new Error(failure);
+        }
+
+        return result;
+      });
     }
   );
 

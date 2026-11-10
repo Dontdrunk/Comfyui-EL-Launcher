@@ -8,6 +8,7 @@ import type {
   PipPackage,
 } from "@explorer-launcher/electron";
 
+import { useServiceStopGuard } from "../../components/service-stop-guard";
 import { Icon } from "../components/Icon";
 import {
   Empty,
@@ -51,10 +52,7 @@ function matchesPackage(name: string, query: string): boolean {
   return false;
 }
 
-function lockTitle(serviceRunning: boolean, busy: boolean): string | undefined {
-  if (serviceRunning) {
-    return "请先停止 ComfyUI";
-  }
+function lockTitle(busy: boolean): string | undefined {
   if (busy) {
     return "有任务正在进行";
   }
@@ -66,14 +64,11 @@ export default function Packages(): React.JSX.Element {
   const settings = useApp((s) => s.settings);
   const env = useApp((s) => s.env);
   const jobs = useApp((s) => s.jobs);
-  const service = useApp((s) => s.service);
   const pushToast = useApp((s) => s.pushToast);
+  const guard = useServiceStopGuard();
 
   const root = settings?.comfyRoot ?? "";
   const pythonOk = Boolean(root && env?.pythonExe);
-
-  const serviceRunning =
-    service?.state === "running" || service?.state === "launching";
 
   const [packages, setPackages] = useState<PipPackage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -133,7 +128,6 @@ export default function Packages(): React.JSX.Element {
 
   const activeJob = runningJob ?? pinnedJob;
   const busy = pending || activeJob?.status === "running";
-  const writeLocked = serviceRunning || busy;
 
   const visible = useMemo(
     () => packages.filter((pkg) => matchesPackage(pkg.name, filter)),
@@ -178,7 +172,7 @@ export default function Packages(): React.JSX.Element {
   const doInstall = (): void => {
     const text = spec.trim();
 
-    if (!text || writeLocked || !pythonOk) {
+    if (!text || busy || !pythonOk) {
       return;
     }
     void runJob(
@@ -194,7 +188,7 @@ export default function Packages(): React.JSX.Element {
   const doUninstall = (): void => {
     const pkg = uninstallTarget;
 
-    if (!pkg || writeLocked || !pythonOk) {
+    if (!pkg || busy || !pythonOk) {
       return;
     }
     setUninstallTarget(null);
@@ -208,7 +202,7 @@ export default function Packages(): React.JSX.Element {
   };
 
   const doReinstall = (pkg: PipPackage): void => {
-    if (writeLocked || !pythonOk) {
+    if (busy || !pythonOk) {
       return;
     }
     void runJob(
@@ -237,7 +231,7 @@ export default function Packages(): React.JSX.Element {
   };
 
   const openRestore = async (): Promise<void> => {
-    if (writeLocked || !pythonOk) {
+    if (busy || !pythonOk) {
       return;
     }
     setRestoreOpen(true);
@@ -264,7 +258,7 @@ export default function Packages(): React.JSX.Element {
   };
 
   const doRestore = (): void => {
-    if (!restorePath || writeLocked || !pythonOk) {
+    if (!restorePath || busy || !pythonOk) {
       return;
     }
     const filePath = restorePath;
@@ -339,8 +333,8 @@ export default function Packages(): React.JSX.Element {
       <button
         type="button"
         className="btn btn--sm"
-        disabled={!pythonOk || writeLocked}
-        title={lockTitle(serviceRunning, busy) ?? "按清单安装或降级已记录的包"}
+        disabled={!pythonOk || busy}
+        title={lockTitle(busy) ?? "按清单安装或降级已记录的包"}
         onClick={() => void openRestore()}
       >
         恢复环境
@@ -389,24 +383,6 @@ export default function Packages(): React.JSX.Element {
           }
         >
           缺少 {root}\python_embeded\python.exe。请改到官方便携版的根目录。
-        </Notice>
-      )}
-      {serviceRunning && (
-        <Notice
-          tone="warn"
-          title="ComfyUI 正在运行"
-          actions={
-            <button
-              type="button"
-              className="btn btn--sm"
-              onClick={() => void navigate({ to: "/dashboard" })}
-            >
-              去停止
-            </button>
-          }
-        >
-          安装、卸载、重装和恢复都会改
-          site-packages，必须先停止服务。查看、搜索、打开目录和备份不受影响。
         </Notice>
       )}
       {(error || listError) && (
@@ -509,8 +485,8 @@ export default function Packages(): React.JSX.Element {
                             <button
                               type="button"
                               className="rowlink"
-                              disabled={writeLocked}
-                              title={lockTitle(serviceRunning, busy)}
+                              disabled={busy}
+                              title={lockTitle(busy)}
                               onClick={() => {
                                 setUninstallTarget(pkg);
                               }}
@@ -520,13 +496,12 @@ export default function Packages(): React.JSX.Element {
                             <button
                               type="button"
                               className="rowlink"
-                              disabled={writeLocked}
-                              title={
-                                lockTitle(serviceRunning, busy) ??
-                                "按当前版本强制重装"
-                              }
+                              disabled={busy}
+                              title={lockTitle(busy) ?? "按当前版本强制重装"}
                               onClick={() => {
-                                doReinstall(pkg);
+                                guard.proceed(`重装 ${pkg.name}`, () => {
+                                  doReinstall(pkg);
+                                });
                               }}
                             >
                               重装
@@ -591,9 +566,9 @@ export default function Packages(): React.JSX.Element {
             <button
               type="button"
               className="btn btn--primary"
-              disabled={!pythonOk || writeLocked || !spec.trim()}
-              title={lockTitle(serviceRunning, busy)}
-              onClick={doInstall}
+              disabled={!pythonOk || busy || !spec.trim()}
+              title={lockTitle(busy)}
+              onClick={() => guard.proceed("安装 Python 包", doInstall)}
             >
               安装
             </button>
@@ -623,7 +598,7 @@ export default function Packages(): React.JSX.Element {
               <button
                 type="button"
                 className="btn btn--danger"
-                onClick={doUninstall}
+                onClick={() => guard.proceed("卸载 Python 包", doUninstall)}
               >
                 卸载
               </button>
@@ -717,9 +692,9 @@ export default function Packages(): React.JSX.Element {
               <button
                 type="button"
                 className="btn btn--danger"
-                disabled={!restorePath || writeLocked}
-                title={lockTitle(serviceRunning, busy)}
-                onClick={doRestore}
+                disabled={!restorePath || busy}
+                title={lockTitle(busy)}
+                onClick={() => guard.proceed("恢复环境", doRestore)}
               >
                 开始恢复
               </button>
@@ -771,6 +746,8 @@ export default function Packages(): React.JSX.Element {
           </div>
         </Modal>
       )}
+
+      {guard.dialog}
     </>
   );
 }

@@ -18,6 +18,7 @@ import type {
   LauncherApi,
   LogLine,
   ModelScanReport,
+  NodeBulkUpdateResult,
   NodeDepsDetail,
   NodeDepsReport,
   NodeReleases,
@@ -193,7 +194,9 @@ const api: LauncherApi = {
       OpResult<null>
     >,
   updateAllNodes: async (root) =>
-    ipcRenderer.invoke(IPC.nodesUpdateAll, root) as Promise<OpResult<string[]>>,
+    ipcRenderer.invoke(IPC.nodesUpdateAll, root) as Promise<
+      OpResult<NodeBulkUpdateResult>
+    >,
   uninstallNode: async (dirName, root) =>
     ipcRenderer.invoke(IPC.nodesUninstall, dirName, root) as Promise<
       OpResult<null>

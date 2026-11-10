@@ -1,4 +1,3 @@
-import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
   Check,
@@ -22,6 +21,7 @@ import type {
   VersionState,
 } from "@explorer-launcher/electron";
 
+import { useServiceStopGuard } from "../../components/service-stop-guard";
 import { Icon } from "../components/Icon";
 import {
   Empty,
@@ -65,10 +65,9 @@ interface Row {
 const COMMIT_PAGE_SIZE = 300;
 
 export default function Versions(): React.JSX.Element {
-  const navigate = useNavigate();
   const settings = useApp((s) => s.settings);
   const jobs = useApp((s) => s.jobs);
-  const service = useApp((s) => s.service);
+  const guard = useServiceStopGuard();
   const refreshEnv = useApp((s) => s.refreshEnv);
   const probeRuntime = useApp((s) => s.probeRuntime);
   const pushToast = useApp((s) => s.pushToast);
@@ -112,9 +111,6 @@ export default function Versions(): React.JSX.Element {
 
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [showReleaseNotes, setShowReleaseNotes] = useState(false);
-
-  const running =
-    service?.state === "running" || service?.state === "launching";
 
   const root = settings?.comfyRoot;
 
@@ -384,7 +380,7 @@ export default function Versions(): React.JSX.Element {
 
   /* ── 操作 ── */
 
-  const openPlan = async (
+  const loadPlan = async (
     name: string,
     kind: RefKind,
     display?: PlanDisplay
@@ -403,6 +399,18 @@ export default function Versions(): React.JSX.Element {
     } finally {
       setPlanning(null);
     }
+  };
+
+  /**
+   * 打开切换确认。切换要改 ComfyUI 代码目录，服务在跑就先停下再读计划 ——
+   * 这样弹窗里的计划不会带着「正在运行」的拦截项。
+   */
+  const openPlan = (
+    name: string,
+    kind: RefKind,
+    display?: PlanDisplay
+  ): void => {
+    guard.proceed("切换版本", async () => loadPlan(name, kind, display));
   };
 
   const doSwitch = async (): Promise<void> => {
@@ -516,26 +524,6 @@ export default function Versions(): React.JSX.Element {
 
   return (
     <>
-      {/* ── 运行中告警：切换版本必须先停服 ── */}
-      {running && (
-        <Notice
-          tone="warn"
-          title="ComfyUI 正在运行"
-          actions={
-            <button
-              type="button"
-              className="btn btn--sm"
-              onClick={() => void navigate({ to: "/dashboard" })}
-            >
-              去停止
-            </button>
-          }
-        >
-          切换版本会改动 ComfyUI
-          代码目录，必须先停止服务。停止后才能执行切换与还原。
-        </Notice>
-      )}
-
       {state?.error && (
         <Notice tone="error" title="版本状态读取异常">
           {state.error}
@@ -585,12 +573,12 @@ export default function Versions(): React.JSX.Element {
           title={<Led tone={ledTone} label={ledLabel} />}
           actions={
             <>
-              {verdict === "behind" && !running && newestTag && (
+              {verdict === "behind" && newestTag && (
                 <button
                   type="button"
                   className="btn btn--primary btn--sm"
                   onClick={() =>
-                    void openPlan(newestTag, "tag", { label: newestTag })
+                    openPlan(newestTag, "tag", { label: newestTag })
                   }
                   disabled={planning !== null}
                 >
@@ -603,13 +591,12 @@ export default function Versions(): React.JSX.Element {
                 </button>
               )}
               {(verdict === "devAhead" || verdict === "offline") &&
-                !running &&
                 newestTag && (
                   <button
                     type="button"
                     className="btn btn--sm"
                     onClick={() =>
-                      void openPlan(newestTag, "tag", { label: newestTag })
+                      openPlan(newestTag, "tag", { label: newestTag })
                     }
                     disabled={planning !== null}
                     title="回到发版线：会切到该发版，当前线上的提交不在此版本中"
@@ -770,8 +757,8 @@ export default function Versions(): React.JSX.Element {
               <button
                 type="button"
                 className="btn btn--sm"
-                onClick={() => void doSyncDeps()}
-                disabled={running || busy}
+                onClick={() => guard.proceed("同步 Python 依赖", doSyncDeps)}
+                disabled={busy}
               >
                 <Icon icon={Download} size={13} />
                 同步 Python 依赖
@@ -879,18 +866,14 @@ export default function Versions(): React.JSX.Element {
                               <button
                                 type="button"
                                 className="btn btn--sm"
-                                disabled={running || planning !== null}
+                                disabled={planning !== null}
                                 onClick={() =>
-                                  void openPlan(r.ref, r.refKind, {
+                                  openPlan(r.ref, r.refKind, {
                                     label: r.id,
                                     subject: r.subject,
                                   })
                                 }
-                                title={
-                                  running
-                                    ? "请先停止 ComfyUI"
-                                    : `切换到 ${r.id}`
-                                }
+                                title={`切换到 ${r.id}`}
                               >
                                 {planning === r.ref ? (
                                   <Spinner />
@@ -992,10 +975,7 @@ export default function Versions(): React.JSX.Element {
                           <button
                             type="button"
                             className="btn btn--sm"
-                            disabled={running}
-                            title={
-                              running ? "请先停止 ComfyUI" : "还原到这个备份"
-                            }
+                            title="还原到这个备份"
                             onClick={() => {
                               setRestoreTarget(b);
                             }}
@@ -1043,7 +1023,7 @@ export default function Versions(): React.JSX.Element {
                 type="button"
                 className="btn btn--primary"
                 disabled={plan.blockers.length > 0}
-                onClick={() => void doSwitch()}
+                onClick={() => guard.proceed("切换版本", doSwitch)}
               >
                 <Icon icon={Check} size={14} />
                 确认切换
@@ -1139,7 +1119,7 @@ export default function Versions(): React.JSX.Element {
               <button
                 type="button"
                 className="btn btn--danger"
-                onClick={() => void doRestore()}
+                onClick={() => guard.proceed("还原备份", doRestore)}
               >
                 确认还原
               </button>
@@ -1168,6 +1148,8 @@ export default function Versions(): React.JSX.Element {
           </div>
         </Modal>
       )}
+
+      {guard.dialog}
     </>
   );
 }

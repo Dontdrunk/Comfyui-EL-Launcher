@@ -9,8 +9,10 @@ import type {
   LogStream,
   NodeDepsDetail,
   NodeDepsEntry,
+  NodeBulkUpdateResult,
   NodeDepsReport,
   NodeReleases,
+  NodeUpdateFailure,
   NodeUpdateInfo,
 } from "@explorer-launcher/electron";
 
@@ -250,6 +252,41 @@ export async function uninstallNode(
 
 /* ── 更新 ── */
 
+/**
+ * 更新当前分支。老版本的更新用 `git pull --ff-only --depth=1`，
+ * 它会把远端尖端取成「没有父提交」的浅克隆边界（.git/shallow）；边界一旦写进
+ * 本地对象库，之后 pull 再浅也连不上 HEAD，ff-only 永远判成分叉；实测已有插件的
+ * 仓库就是这样卡住、再也更新不了的。
+ *
+ * 所以先正常拉取；失败且仓库仍是浅克隆时补全历史再试一次。补全后仍失败，
+ * 才是本地确实有远端没有的提交，把失败原样抛给上层。
+ */
+async function pullWithShallowRepair(
+  dir: string,
+  onLine?: (s: LogStream, t: string) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const opts = { onLine, signal, timeoutMs: CLONE_TIMEOUT_MS };
+
+  try {
+    await git(dir, ["pull", "--ff-only"], opts);
+  } catch (error) {
+    const shallow =
+      (await gitSoft(dir, ["rev-parse", "--is-shallow-repository"])) === "true";
+
+    if (!shallow) {
+      throw error;
+    }
+
+    onLine?.(
+      "system",
+      "[插件] 浅克隆历史不完整，ff-only 无法判断能否快进；先补全历史再试一次…"
+    );
+    await git(dir, ["fetch", "--unshallow", "origin"], opts);
+    await git(dir, ["pull", "--ff-only"], opts);
+  }
+}
+
 export async function updateNode(
   root: string,
   dirName: string,
@@ -290,11 +327,7 @@ export async function updateNode(
 
   if (branch) {
     log(`[插件] 更新 ${dirName}（分支 ${branch}）…`);
-    await git(dir, ["pull", "--ff-only", "--depth=1"], {
-      onLine,
-      signal,
-      timeoutMs: CLONE_TIMEOUT_MS,
-    });
+    await pullWithShallowRepair(dir, onLine, signal);
   } else {
     // 游离 HEAD（安装时按 tag/commit 拉的）→ 直接对齐远端 HEAD
     log(`[插件] ${dirName} 处于游离 HEAD，改为对齐远端 HEAD…`);
@@ -318,17 +351,18 @@ export async function updateAllNodes(
   root: string,
   onLine?: (s: LogStream, t: string) => void,
   signal?: AbortSignal
-): Promise<string[]> {
+): Promise<NodeBulkUpdateResult> {
   const info = await checkNodeUpdates(root);
   const targets = info.filter((i) => i.hasUpdate).map((i) => i.dirName);
 
   if (targets.length === 0) {
     onLine?.("system", "[插件] 所有插件都已是最新。");
 
-    return [];
+    return { failed: [], updated: [] };
   }
 
   const updated: string[] = [];
+  const failed: NodeUpdateFailure[] = [];
 
   for (const name of targets) {
     if (signal?.aborted) {
@@ -338,14 +372,13 @@ export async function updateAllNodes(
       await updateNode(root, name, onLine, signal);
       updated.push(name);
     } catch (error) {
-      onLine?.(
-        "stderr",
-        `[插件] ${name} 更新失败：${error instanceof Error ? error.message : String(error)}`
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      failed.push({ dirName: name, error: message });
+      onLine?.("stderr", `[插件] ${name} 更新失败：${message}`);
     }
   }
 
-  return updated;
+  return { failed, updated };
 }
 
 /* ── 依赖 ── */

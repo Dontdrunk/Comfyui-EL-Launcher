@@ -1,4 +1,3 @@
-import { useNavigate } from "@tanstack/react-router";
 import { Check, Download, ExternalLink, Plug, RefreshCw, Search } from "lucide";
 import {
   useCallback,
@@ -21,6 +20,8 @@ import type {
 } from "@explorer-launcher/electron";
 import { depDot, depVisualTone } from "@explorer-launcher/electron";
 
+import { useServiceStopGuard } from "../../components/service-stop-guard";
+import { remoteLabel, remoteWebUrl } from "../../lib/remote-url";
 import { Icon } from "../components/Icon";
 import {
   Empty,
@@ -49,15 +50,11 @@ import { useApp } from "../store";
 type Tab = "installed" | "search";
 
 export default function Nodes(): React.JSX.Element {
-  const navigate = useNavigate();
   const settings = useApp((s) => s.settings);
   const jobs = useApp((s) => s.jobs);
-  const service = useApp((s) => s.service);
   const pushToast = useApp((s) => s.pushToast);
+  const guard = useServiceStopGuard();
   const root = settings?.comfyRoot;
-
-  const running =
-    service?.state === "running" || service?.state === "launching";
 
   const [tab, setTab] = useState<Tab>("installed");
   const [installed, setInstalled] = useState<InstalledNode[]>([]);
@@ -287,9 +284,10 @@ export default function Nodes(): React.JSX.Element {
       setLastInstall(null);
     }
 
+    /* 批量里部分成功也算任务失败，但已更新的插件要把角标刷掉，所以不看状态 */
     if (
-      activeJob.status === "succeeded" &&
-      (activeJob.kind === "node-update" || activeJob.kind === "node-update-all")
+      activeJob.kind === "node-update" ||
+      activeJob.kind === "node-update-all"
     ) {
       void doCheckUpdates();
     }
@@ -537,14 +535,17 @@ export default function Nodes(): React.JSX.Element {
     const res = await window.launcher.updateAllNodes(root);
 
     if (res.ok) {
+      const { updated } = res.value;
+
       pushToast(
-        res.value.length > 0
-          ? `已更新 ${res.value.length} 个插件`
+        updated.length > 0
+          ? `已更新 ${updated.length} 个插件`
           : "所有插件都已是最新"
       );
     } else {
+      /* 只要有插件更新失败，主进程就整批算失败，error 里带成功数与失败原因 */
       setError(res.error);
-      pushToast(`批量更新失败：${res.error}`, "error");
+      pushToast(res.error, "error");
     }
     startJob(res);
   };
@@ -709,25 +710,6 @@ export default function Nodes(): React.JSX.Element {
 
   return (
     <>
-      {running && (
-        <Notice
-          tone="warn"
-          title="ComfyUI 正在运行"
-          actions={
-            <button
-              type="button"
-              className="btn btn--sm"
-              onClick={() => void navigate({ to: "/dashboard" })}
-            >
-              去停止
-            </button>
-          }
-        >
-          安装、卸载、启停插件都会改动 custom_nodes
-          目录，必须先停止服务。查看与搜索不受影响。
-        </Notice>
-      )}
-
       {error && (
         <Notice tone="error" title="操作失败">
           {error}
@@ -783,9 +765,8 @@ export default function Nodes(): React.JSX.Element {
             <button
               type="button"
               className="btn btn--sm"
-              onClick={() => void doInstallAllDeps()}
-              disabled={running || installed.length === 0}
-              title={running ? "请先停止 ComfyUI" : undefined}
+              onClick={() => guard.proceed("重装插件依赖", doInstallAllDeps)}
+              disabled={installed.length === 0}
             >
               <Icon icon={Download} size={13} />
               重装所有插件依赖
@@ -867,9 +848,8 @@ export default function Nodes(): React.JSX.Element {
                         <button
                           type="button"
                           className="btn btn--sm"
-                          disabled={running || updateCount === 0}
-                          title={running ? "请先停止 ComfyUI" : undefined}
-                          onClick={() => void doUpdateAll()}
+                          disabled={updateCount === 0}
+                          onClick={() => guard.proceed("更新插件", doUpdateAll)}
                         >
                           一键更新{updateCount > 0 ? ` (${updateCount})` : ""}
                         </button>
@@ -886,8 +866,11 @@ export default function Nodes(): React.JSX.Element {
                         <td>
                           <Switch
                             checked={n.enabled}
-                            disabled={running}
-                            onChange={() => void doToggle(n)}
+                            onChange={() =>
+                              guard.proceed("修改插件启用状态", async () =>
+                                doToggle(n)
+                              )
+                            }
                           />
                         </td>
                         <td>
@@ -912,23 +895,12 @@ export default function Nodes(): React.JSX.Element {
                               root={root}
                               summary={depSummary.get(n.dirName)}
                               onDepsChanged={() => void checkDeps()}
+                              proceed={guard.proceed}
                             />
                           )}
                         </td>
                         <td>
-                          <span
-                            className="mono dim ellipsis"
-                            style={{
-                              display: "inline-block",
-                              maxWidth: 340,
-                              verticalAlign: "bottom",
-                            }}
-                            title={n.remote ?? "非 git 目录"}
-                          >
-                            {n.remote
-                              ? n.remote.replace(/^https:\/\/github\.com\//, "")
-                              : "非 git 目录"}
-                          </span>
+                          <RemoteAddress remote={n.remote} />
                         </td>
                         <td className="mono">{n.shortCommit ?? "—"}</td>
                         <td
@@ -942,9 +914,13 @@ export default function Nodes(): React.JSX.Element {
                             <NodeVersionMark
                               info={up}
                               busy={updatingDir === n.dirName}
-                              running={running}
                               locked={updatingDir !== null}
-                              onUpdate={() => void doUpdateOne(n)}
+                              onUpdate={() =>
+                                guard.proceed(
+                                  `更新插件 ${n.baseName}`,
+                                  async () => doUpdateOne(n)
+                                )
+                              }
                             />
                             <button
                               type="button"
@@ -956,8 +932,6 @@ export default function Nodes(): React.JSX.Element {
                             <button
                               type="button"
                               className="rowlink rowlink--danger"
-                              disabled={running}
-                              title={running ? "请先停止 ComfyUI" : undefined}
                               onClick={() => {
                                 setUninstallTarget(n);
                               }}
@@ -1024,8 +998,11 @@ export default function Nodes(): React.JSX.Element {
                       key={node.id}
                       node={node}
                       installed={isInstalled(node)}
-                      disabled={running}
-                      onInstall={() => void doInstallRegistry(node)}
+                      onInstall={() =>
+                        guard.proceed("安装插件", async () =>
+                          doInstallRegistry(node)
+                        )
+                      }
                     />
                   ))}
                 </div>
@@ -1122,13 +1099,12 @@ export default function Nodes(): React.JSX.Element {
                   placeholder="请填写插件 git 地址"
                   value={gitUrl}
                   spellCheck={false}
-                  title={running ? "请先停止 ComfyUI" : undefined}
                   onChange={(e) => {
                     setGitUrl(e.target.value);
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && gitUrl.trim() && !running) {
-                      void doInstallGit();
+                    if (e.key === "Enter" && gitUrl.trim()) {
+                      guard.proceed("安装插件", doInstallGit);
                     }
                   }}
                 />
@@ -1136,9 +1112,8 @@ export default function Nodes(): React.JSX.Element {
               <button
                 type="button"
                 className="btn btn--primary"
-                disabled={running || !gitUrl.trim()}
-                title={running ? "请先停止 ComfyUI" : undefined}
-                onClick={() => void doInstallGit()}
+                disabled={!gitUrl.trim()}
+                onClick={() => guard.proceed("安装插件", doInstallGit)}
               >
                 <Icon icon={Download} size={14} />
                 安装
@@ -1171,7 +1146,7 @@ export default function Nodes(): React.JSX.Element {
               <button
                 type="button"
                 className="btn btn--danger"
-                onClick={() => void doUninstall()}
+                onClick={() => guard.proceed("卸载插件", doUninstall)}
               >
                 移入回收站
               </button>
@@ -1266,13 +1241,14 @@ export default function Nodes(): React.JSX.Element {
                           className="select select--compact"
                           style={{ flex: 1, minWidth: 0 }}
                           value={releases?.branch ?? ""}
-                          disabled={running || verSwitching !== null}
-                          title={running ? "请先停止 ComfyUI" : undefined}
+                          disabled={verSwitching !== null}
                           onChange={(e) => {
                             const name = e.target.value;
 
                             if (name && name !== releases?.branch) {
-                              void doCheckout(verTarget, name, `分支 ${name}`);
+                              guard.proceed(`切换分支 ${name}`, async () =>
+                                doCheckout(verTarget, name, `分支 ${name}`)
+                              );
                             }
                           }}
                         >
@@ -1317,10 +1293,11 @@ export default function Nodes(): React.JSX.Element {
                           <button
                             type="button"
                             className="btn btn--sm"
-                            disabled={running || verSwitching !== null}
-                            title={running ? "请先停止 ComfyUI" : undefined}
+                            disabled={verSwitching !== null}
                             onClick={() =>
-                              void doCheckout(verTarget, r.sha, r.short)
+                              guard.proceed(`切换版本 ${r.short}`, async () =>
+                                doCheckout(verTarget, r.sha, r.short)
+                              )
                             }
                           >
                             {verSwitching === r.sha ? <Spinner /> : null}
@@ -1336,6 +1313,8 @@ export default function Nodes(): React.JSX.Element {
           )}
         </Modal>
       )}
+
+      {guard.dialog}
     </>
   );
 }
@@ -1349,13 +1328,11 @@ export default function Nodes(): React.JSX.Element {
 function NodeVersionMark({
   info,
   busy,
-  running,
   locked,
   onUpdate,
 }: {
   info: NodeUpdateInfo | undefined;
   busy: boolean;
-  running: boolean;
   locked: boolean;
   onUpdate: () => void;
 }): React.JSX.Element | null {
@@ -1396,11 +1373,61 @@ function NodeVersionMark({
     <button
       type="button"
       className="rowlink"
-      disabled={running || locked}
-      title={running ? "请先停止 ComfyUI" : "更新到远端最新提交"}
+      disabled={locked}
+      title="更新到远端最新提交"
       onClick={onUpdate}
     >
       {busy ? "更新中" : "更新"}
+    </button>
+  );
+}
+
+/* ── 远程地址：能打开的就做成链接，git@ / ssh 形式先转成 https ── */
+
+/**
+ * 远程地址列一律压到 340px：这是表格里唯一可能很长的字符串
+ * （file://、内网 gitlab 地址），不截断会把「操作」列挤到换行。
+ */
+const REMOTE_CELL_STYLE: React.CSSProperties = {
+  display: "inline-block",
+  maxWidth: 340,
+  overflow: "hidden",
+  textAlign: "left",
+  textOverflow: "ellipsis",
+  verticalAlign: "bottom",
+  whiteSpace: "nowrap",
+};
+
+function RemoteAddress({
+  remote,
+}: {
+  remote: string | null;
+}): React.JSX.Element {
+  if (!remote) {
+    return <span className="mono dim">非 git 目录</span>;
+  }
+
+  const web = remoteWebUrl(remote);
+
+  if (!web) {
+    return (
+      <span className="mono dim" style={REMOTE_CELL_STYLE} title={remote}>
+        {remoteLabel(remote)}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="rowlink"
+      style={REMOTE_CELL_STYLE}
+      title={`在浏览器打开 ${web}`}
+      onClick={() => {
+        void window.launcher.openExternal(web);
+      }}
+    >
+      {remoteLabel(remote)}
     </button>
   );
 }
@@ -1412,6 +1439,7 @@ function DepCell({
   root,
   summary,
   onDepsChanged,
+  proceed,
 }: {
   node: InstalledNode;
   root: string;
@@ -1419,6 +1447,8 @@ function DepCell({
   summary?: { total: number; missing: number; error: string | null };
   /** 单项依赖装完后刷新整行状态 */
   onDepsChanged?: () => void;
+  /** 装依赖同样要停服，统一走页面的守卫 */
+  proceed: (action: string, run: () => Promise<void> | void) => void;
 }): React.JSX.Element {
   const pushToast = useApp((s) => s.pushToast);
   const [detail, setDetail] = useState<NodeDepsDetail | null>(null);
@@ -1546,7 +1576,11 @@ function DepCell({
                   type="button"
                   className="rowlink"
                   disabled={busy !== null}
-                  onClick={() => void install(d.name, d.spec)}
+                  onClick={() =>
+                    proceed(`安装依赖 ${d.name}`, async () =>
+                      install(d.name, d.spec)
+                    )
+                  }
                 >
                   {busy === d.name ? "…" : d.installed ? "重装" : "安装"}
                 </button>
@@ -1563,12 +1597,10 @@ function DepCell({
 function PluginCard({
   node,
   installed,
-  disabled,
   onInstall,
 }: {
   node: RegistryNode;
   installed: boolean;
-  disabled: boolean;
   onInstall: () => void;
 }): React.JSX.Element {
   return (
@@ -1637,15 +1669,13 @@ function PluginCard({
           type="button"
           className="btn btn--sm"
           style={{ marginLeft: "auto" }}
-          disabled={disabled || installed || !node.repository}
+          disabled={installed || !node.repository}
           onClick={onInstall}
           title={
             node.repository
               ? installed
                 ? "已安装"
-                : disabled
-                  ? "请先停止 ComfyUI"
-                  : `安装 ${node.name}`
+                : `安装 ${node.name}`
               : "该插件未登记仓库地址，无法自动安装"
           }
         >

@@ -75,6 +75,14 @@ export default defineConfig({
         },
       },
       {
+        // 停服确认弹窗复用迁移过来的全局按钮类（.btn / .btn--danger），
+        // 它们来自 launcher/styles/global.css，不是 Tailwind 生成的工具类。
+        files: ["apps/web/src/components/service-stop-guard.tsx"],
+        rules: {
+          "shadcn/no-unknown-classes": "off",
+        },
+      },
+      {
         // 旧项目原样迁入的代码：格式化和类型检查照跑，风格类规则先豁免。
         // 这是搬运而不是重写——1.7 万行一次性改成 ultracite 风格不现实，
         // 但真正会出 BUG 的规则（hook 依赖、eqeqeq、未使用变量、类型错误）保持开启。
