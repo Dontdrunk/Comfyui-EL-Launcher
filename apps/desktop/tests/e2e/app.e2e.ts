@@ -421,6 +421,37 @@ test("toggling a plugin keeps its update status", async () => {
   }
 });
 
+test("a hand-placed plugin reads as a local install and latest", async () => {
+  const comfyRoot = await mkdtemp(
+    path.join(os.tmpdir(), "explorer-launcher-comfy-")
+  );
+
+  await makePortableRoot(comfyRoot);
+  await mkdir(path.join(comfyRoot, "ComfyUI", "custom_nodes", "PluginLocal"), {
+    recursive: true,
+  });
+
+  const launched = await launch({ comfyRoot });
+
+  try {
+    const { page } = launched;
+
+    await page.getByRole("link", { name: "插件管理" }).click();
+
+    const row = page.locator("tbody tr").filter({ hasText: "PluginLocal" });
+
+    await expect(row).toHaveCount(1);
+    // 自己放进 custom_nodes 的目录：来源是「手动安装」，不是「非 git 目录」
+    await expect(row.getByText("手动安装")).toBeVisible();
+    // 没有远端就没有可比的版本，算「最新」，不能挂一条「未比对」当异常
+    await expect(row.getByText("最新")).toBeVisible();
+    await expect(row.getByText("未比对")).toHaveCount(0);
+  } finally {
+    await close(launched);
+    await rm(comfyRoot, { force: true, recursive: true });
+  }
+});
+
 test("the theme switch survives a reload", async () => {
   const launched = await launch();
 

@@ -57,6 +57,9 @@ import { useApp } from "../store";
 
 type Tab = "installed" | "search";
 
+/** 没有远端仓库的插件（自己放进 custom_nodes 的本地目录）在「来源」列里的叫法 */
+const LOCAL_PLUGIN_LABEL = "手动安装";
+
 export default function Nodes(): React.JSX.Element {
   const settings = useApp((s) => s.settings);
   const jobs = useApp((s) => s.jobs);
@@ -723,7 +726,7 @@ export default function Nodes(): React.JSX.Element {
       (n) =>
         n.baseName.toLowerCase().includes(q) ||
         (n.displayName ?? "").toLowerCase().includes(q) ||
-        (n.remote ?? "").toLowerCase().includes(q)
+        (n.remote ?? LOCAL_PLUGIN_LABEL).toLowerCase().includes(q)
     );
   }, [installed, filter]);
 
@@ -779,7 +782,7 @@ export default function Nodes(): React.JSX.Element {
           </>
         }
       >
-        {/* ══════════ 已安装：表头即工具栏（启用 / 名称+搜索 / 依赖 / 远程地址 / 版本ID / 更新时间 / 操作） ══════════ */}
+        {/* ══════════ 已安装：表头即工具栏（启用 / 名称+搜索 / 依赖 / 来源 / 版本ID / 更新时间 / 操作） ══════════ */}
         {/* ══════════ 已安装 ══════════ */}
         {tab === "installed" &&
           (loading && installed.length === 0 ? (
@@ -837,7 +840,7 @@ export default function Nodes(): React.JSX.Element {
                     >
                       依赖
                     </th>
-                    <th>远程地址</th>
+                    <th>来源</th>
                     <th style={{ width: 100 }}>版本ID</th>
                     <th style={{ width: 170 }}>更新时间</th>
                     <th style={{ width: 220 }}>
@@ -863,7 +866,7 @@ export default function Nodes(): React.JSX.Element {
                       <td colSpan={7}>
                         <Empty
                           title="没有匹配的插件"
-                          hint={`没有插件名称或远程地址包含「${filter.trim()}」。清空上方搜索框即可显示全部 ${installed.length} 个插件。`}
+                          hint={`没有插件名称或来源包含「${filter.trim()}」。清空上方搜索框即可显示全部 ${installed.length} 个插件。`}
                         />
                       </td>
                     </tr>
@@ -921,7 +924,7 @@ export default function Nodes(): React.JSX.Element {
                           )}
                         </td>
                         <td>
-                          <RemoteAddress remote={n.remote} />
+                          <SourceCell remote={n.remote} />
                         </td>
                         <td className="mono">{n.shortCommit ?? "—"}</td>
                         <td
@@ -934,6 +937,7 @@ export default function Nodes(): React.JSX.Element {
                           <div className="table__actions">
                             <NodeVersionMark
                               info={up}
+                              comparable={Boolean(n.remote)}
                               busy={updatingBase === n.baseName}
                               locked={updatingBase !== null}
                               onUpdate={() =>
@@ -1180,9 +1184,9 @@ export default function Nodes(): React.JSX.Element {
           <div className="kv" style={{ marginTop: "var(--sp-3)" }}>
             <span className="kv__k">目录</span>
             <span className="kv__v">{uninstallTarget.path}</span>
-            <span className="kv__k">仓库</span>
+            <span className="kv__k">来源</span>
             <span className="kv__v">
-              {uninstallTarget.remote ?? "非 git 目录"}
+              {uninstallTarget.remote ?? "手动安装（本地目录）"}
             </span>
           </div>
           <div style={{ marginTop: "var(--sp-3)" }}>
@@ -1342,21 +1346,40 @@ export default function Nodes(): React.JSX.Element {
 
 /*
  * 切换版本前面的版本状态。
+ * 本地插件（没有远端仓库）没有可对比的对象：直接按「最新」处理，
+ * 不要拿「未比对」当异常挂在行上 —— 那不是问题，是根本没有远端。
  * 比对过、且和远端一致：灰色「最新」，不是按钮，点不了。
  * 远端有新提交：蓝色「更新」，点了才拉取。
  * 还没比对完、或这次没读到远端：什么都不放，避免把未知说成最新。
  */
 function NodeVersionMark({
   info,
+  comparable,
   busy,
   locked,
   onUpdate,
 }: {
   info: NodeUpdateInfo | undefined;
+  /** 能不能和远端比对；本地目录没有可对比的对象 */
+  comparable: boolean;
   busy: boolean;
   locked: boolean;
   onUpdate: () => void;
 }): React.JSX.Element | null {
+  if (!comparable) {
+    return (
+      <button
+        type="button"
+        className="rowlink latest-flag"
+        disabled
+        tabIndex={-1}
+        title="本地目录：没有关联远端仓库，无可比对"
+      >
+        最新
+      </button>
+    );
+  }
+
   if (!info) {
     return null;
   }
@@ -1403,10 +1426,10 @@ function NodeVersionMark({
   );
 }
 
-/* ── 远程地址：能打开的就做成链接，git@ / ssh 形式先转成 https ── */
+/* ── 来源：有远端仓库就做成链接，git@ / ssh 形式先转成 https ── */
 
 /**
- * 远程地址列一律压到 340px：这是表格里唯一可能很长的字符串
+ * 来源列一律压到 340px：这是表格里唯一可能很长的字符串
  * （file://、内网 gitlab 地址），不截断会把「操作」列挤到换行。
  */
 const REMOTE_CELL_STYLE: React.CSSProperties = {
@@ -1419,13 +1442,16 @@ const REMOTE_CELL_STYLE: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-function RemoteAddress({
-  remote,
-}: {
-  remote: string | null;
-}): React.JSX.Element {
+function SourceCell({ remote }: { remote: string | null }): React.JSX.Element {
   if (!remote) {
-    return <span className="mono dim">非 git 目录</span>;
+    return (
+      <span
+        className="mono dim"
+        title="本地目录：没有关联远端仓库，不参与版本比对"
+      >
+        {LOCAL_PLUGIN_LABEL}
+      </span>
+    );
   }
 
   const web = remoteWebUrl(remote);
