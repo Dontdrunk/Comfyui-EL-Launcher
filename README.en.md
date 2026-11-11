@@ -2,7 +2,7 @@
 
 [简体中文](README.md) · **English**
 
-[![Latest release](https://img.shields.io/github/v/release/Dontdrunk/Comfyui-EL-Launcher?label=Release)](https://github.com/Dontdrunk/Comfyui-EL-Launcher/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/Dontdrunk/Comfyui-EL-Launcher?label=Release)](https://github.com/Dontdrunk/Comfyui-EL-Launcher/releases/latest) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A desktop launcher and manager for the **official ComfyUI Windows portable build**. Start and stop ComfyUI, switch versions and roll back from backups, install and update custom nodes, audit Python dependencies, and clean up model files — all in one window. The interface follows an industrial instrument-panel style, with colors taken from ComfyUI's official frontend palette and dark / light themes.
 
@@ -262,3 +262,9 @@ Artifacts land in `apps/desktop/release`:
 ## Feedback
 
 Please file issues at [GitHub Issues](https://github.com/Dontdrunk/Comfyui-EL-Launcher/issues) with the launcher version, ComfyUI version, and reproduction steps.
+
+## License
+
+Released under the [MIT](LICENSE) license. You are free to use, modify, and redistribute it as long as the copyright notice is kept.
+
+Copyright © 2026 Dontdrunk

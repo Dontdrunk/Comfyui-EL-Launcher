@@ -2,7 +2,7 @@
 
 **简体中文** · [English](README.en.md)
 
-[![Latest release](https://img.shields.io/github/v/release/Dontdrunk/Comfyui-EL-Launcher?label=Release)](https://github.com/Dontdrunk/Comfyui-EL-Launcher/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/Dontdrunk/Comfyui-EL-Launcher?label=Release)](https://github.com/Dontdrunk/Comfyui-EL-Launcher/releases/latest) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 面向 **ComfyUI 官方 Windows 便携版** 的桌面启动与管理工具。启动和停止 ComfyUI、切换版本与回滚备份、安装和更新插件、核对 Python 依赖、清理模型文件，都在一个窗口里完成。界面为工业仪表台风格，配色取自 ComfyUI 官方前端调色板，支持暗色 / 亮色主题。
 
@@ -262,3 +262,9 @@ vp run package:desktop
 ## 反馈
 
 请在 [GitHub Issues](https://github.com/Dontdrunk/Comfyui-EL-Launcher/issues) 提交问题，附启动器版本、ComfyUI 版本与复现步骤。
+
+## 许可证
+
+本项目基于 [MIT](LICENSE) 协议开源，可自由使用、修改与再分发，保留版权声明即可。
+
+Copyright © 2026 Dontdrunk
