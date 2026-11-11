@@ -1,4 +1,5 @@
-import { mkdir, rename, rm } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
 import { shell } from "electron";
@@ -19,19 +20,23 @@ import type {
 
 import { buildChildEnv } from "../lib/childEnv";
 import { run } from "../lib/exec";
+import type { RunResult } from "../lib/exec";
 import { resolveComfyPaths } from "../lib/paths";
-import { pipInstall, pipInstallPackages } from "../lib/pip";
+import { pipInstall, pipInstallPackages, pipInstallSource } from "../lib/pip";
 import { git, gitRaw, gitSoft } from "./git";
 import {
+  installedSourceVersion,
+  isDirectRequirement,
   listNodeDirs,
   nodeDirForEnabled,
+  parseRequirement,
   pathExists,
   readNodeGitInfo,
   readNodeManifest,
   readRequirements,
-  requirementName,
-  toRequirementEntries,
+  sourceLabel,
 } from "./nodeScan";
+import type { InstalledDists, RequirementEntry } from "./nodeScan";
 import { getRegistryNode } from "./registry";
 import { serviceManager } from "./service";
 
@@ -449,24 +454,35 @@ from importlib import metadata
 def norm(n):
     return n.lower().replace('_', '-').replace('.', '-')
 
-names = json.loads(sys.argv[1])
-installed = set()
-try:
-    for dist in metadata.distributions():
-        try:
-            n = dist.metadata['Name']
-        except Exception:
-            n = None
-        if n:
-            installed.add(norm(n))
-except Exception as e:
-    print("${DEPS_MARKER}" + json.dumps({"error": str(e)}))
-    raise SystemExit(0)
+wanted = {norm(n) for n in json.loads(sys.argv[1]).get("names", [])}
+versions = {}
+direct_urls = {}
+for dist in metadata.distributions():
+    try:
+        name = dist.metadata['Name']
+    except Exception:
+        name = None
+    if not name:
+        continue
+    versions[norm(name)] = dist.version
+    try:
+        raw = dist.read_text('direct_url.json')
+    except Exception:
+        raw = None
+    if not raw:
+        continue
+    try:
+        url = json.loads(raw).get('url')
+    except Exception:
+        continue
+    if url:
+        direct_urls[url] = dist.version
 
-wanted = {norm(n) for n in names}
 print("${DEPS_MARKER}" + json.dumps({
-    "packageCount": len(installed),
-    "missing": sorted(wanted - installed),
+    "packageCount": len(versions),
+    "missing": sorted(wanted - set(versions)),
+    "versions": versions,
+    "directUrls": direct_urls,
 }))
 `;
 
@@ -486,16 +502,17 @@ export async function checkNodeDeps(
     error: null,
   };
 
-  /* 收集所有 requirement 名 */
+  /* 收集所有依赖声明 */
   const perNode: {
     dirName: string;
     displayName: string | null;
     enabled: boolean;
     reqs: string[];
-    names: string[];
+    entries: RequirementEntry[];
   }[] = [];
 
   const allNames = new Set<string>();
+  let sourceCount = 0;
 
   for (const d of dirs) {
     const [reqs, manifest] = await Promise.all([
@@ -503,21 +520,25 @@ export async function checkNodeDeps(
       readNodeManifest(d.path),
     ]);
 
-    const names = reqs.map(requirementName);
+    const entries = reqs.map(parseRequirement);
 
-    for (const n of names) {
-      allNames.add(n);
+    for (const e of entries) {
+      if (e.kind === "source") {
+        sourceCount++;
+      } else {
+        allNames.add(e.name);
+      }
     }
     perNode.push({
       dirName: d.dirName,
       displayName: manifest.displayName ?? d.baseName,
       enabled: d.enabled,
       reqs,
-      names,
+      entries,
     });
   }
 
-  if (allNames.size === 0) {
+  if (allNames.size === 0 && sourceCount === 0) {
     report.entries = perNode.map((n) => ({
       dirName: n.dirName,
       displayName: n.displayName,
@@ -538,11 +559,16 @@ export async function checkNodeDeps(
     return report;
   }
 
-  onLine?.("system", `[依赖] 正在检查 ${allNames.size} 个依赖包…`);
+  onLine?.(
+    "system",
+    `[依赖] 正在检查 ${allNames.size} 个依赖包${
+      sourceCount > 0 ? ` + ${sourceCount} 个源码依赖` : ""
+    }…`
+  );
 
   const r = await run(
     paths.pythonExe,
-    ["-s", "-c", DEPS_SCRIPT, JSON.stringify([...allNames])],
+    ["-s", "-c", DEPS_SCRIPT, JSON.stringify({ names: [...allNames] })],
     {
       cwd: paths.root,
       env: buildChildEnv(),
@@ -569,22 +595,22 @@ export async function checkNodeDeps(
 
   let missingSet = new Set<string>();
   let packageCount = 0;
+  let dists: InstalledDists = { versions: {}, directUrls: {} };
 
   try {
     const data = JSON.parse(line.slice(DEPS_MARKER.length)) as {
       packageCount?: number;
       missing?: string[];
-      error?: string;
+      versions?: Record<string, string>;
+      directUrls?: Record<string, string>;
     };
-
-    if (data.error) {
-      report.error = `依赖检查出错：${data.error}`;
-
-      return report;
-    }
 
     packageCount = data.packageCount ?? 0;
     missingSet = new Set(data.missing ?? []);
+    dists = {
+      versions: data.versions ?? {},
+      directUrls: data.directUrls ?? {},
+    };
   } catch (error) {
     report.error = `依赖检查结果解析失败：${error instanceof Error ? error.message : String(error)}`;
 
@@ -592,7 +618,13 @@ export async function checkNodeDeps(
   }
 
   const entries: NodeDepsEntry[] = perNode.map((n) => {
-    const missing = n.names.filter((name) => missingSet.has(name));
+    const missing = n.entries
+      .filter((e) =>
+        e.kind === "source"
+          ? installedSourceVersion(e.install, dists) === null
+          : missingSet.has(e.name)
+      )
+      .map((e) => (e.kind === "source" ? sourceLabel(e.install) : e.name));
 
     return {
       dirName: n.dirName,
@@ -600,7 +632,7 @@ export async function checkNodeDeps(
       enabled: n.enabled,
       requirements: n.reqs,
       missing,
-      satisfied: n.names.length - missing.length,
+      satisfied: n.entries.length - missing.length,
       error: null,
     };
   });
@@ -619,6 +651,30 @@ export async function checkNodeDeps(
   return report;
 }
 
+/** pip 安装收尾：启动失败/超时/取消/非零退出各有说法 */
+function assertInstallOk(r: RunResult, action: string): void {
+  if (r.spawnError) {
+    throw new Error(`无法启动 pip：${r.spawnError}`);
+  }
+  if (r.timedOut) {
+    throw new Error(`${action}超时`);
+  }
+  if (r.aborted) {
+    throw new Error(`${action}已取消`);
+  }
+  if (r.code !== 0) {
+    const tail = (r.stderr || r.stdout)
+      .trim()
+      .split(/\r?\n/)
+      .slice(-10)
+      .join("\n");
+
+    throw new Error(
+      `${action}失败（退出码 ${r.code}）${tail ? `\n${tail}` : ""}`
+    );
+  }
+}
+
 /** 为单个插件安装 requirements.txt 中的依赖 */
 export async function installNodeDeps(
   root: string,
@@ -634,32 +690,73 @@ export async function installNodeDeps(
     throw new Error(`${dirName} 没有 requirements.txt，无需安装依赖。`);
   }
 
+  const entries = (await readRequirements(dir)).map(parseRequirement);
+  const sources = entries.filter((e) => e.kind === "source");
+
   onLine?.("system", `[依赖] 开始为 ${dirName} 安装依赖…`);
 
-  const r = await pipInstall(paths.pythonExe, reqFile, {
-    cwd: paths.root,
-    onLine: (stream, text) => onLine?.(stream, text),
-    timeoutMs: PIP_TIMEOUT_MS,
-    signal,
-  });
+  const runPip = async (file: string): Promise<RunResult> =>
+    await pipInstall(paths.pythonExe, file, {
+      cwd: paths.root,
+      onLine: (stream, text) => onLine?.(stream, text),
+      timeoutMs: PIP_TIMEOUT_MS,
+      signal,
+    });
 
-  if (r.spawnError) {
-    throw new Error(`无法启动 pip：${r.spawnError}`);
+  if (sources.length === 0) {
+    assertInstallOk(await runPip(reqFile), "pip 安装");
+    onLine?.("system", `[依赖] ${dirName} 的依赖安装完成。`);
+
+    return;
   }
-  if (r.timedOut) {
-    throw new Error("pip 安装超时（30 分钟）");
-  }
-  if (r.aborted) {
-    throw new Error("pip 安装已取消");
-  }
-  if (r.code !== 0) {
-    const tail = (r.stderr || r.stdout)
-      .trim()
+
+  /*
+   * 有直接引用时整批 `-r` 会一荣俱荣一损俱损：GitHub 不通，同一文件里的普通包也一起装不上。
+   * 所以拆两趟——先让包依赖落地，再逐个装源码依赖，一个源码依赖失败只影响它自己。
+   * 第一趟仍然走 `-r`，只把源码行剔掉，`--extra-index-url`、`-r 子文件` 这类选项行原样保留；
+   * 临时文件放系统临时目录，免得在插件仓库里留下未跟踪文件。
+   */
+  if (entries.some((e) => e.kind === "package")) {
+    const pkgFile = join(
+      tmpdir(),
+      `xl-node-req-${process.pid}-${Date.now()}.txt`
+    );
+    const kept = (await readFile(reqFile, "utf-8"))
       .split(/\r?\n/)
-      .slice(-10)
+      .filter((l) => !isDirectRequirement(l))
       .join("\n");
 
-    throw new Error(`pip 安装失败（退出码 ${r.code}）\n${tail}`);
+    await writeFile(pkgFile, kept, "utf-8");
+    try {
+      assertInstallOk(await runPip(pkgFile), "pip 安装");
+    } finally {
+      await rm(pkgFile, { force: true }).catch(() => {});
+    }
+  }
+
+  const failed: string[] = [];
+
+  for (const e of sources) {
+    onLine?.("system", `[依赖] 源码安装 ${e.install}…`);
+
+    const r = await pipInstallSource(paths.pythonExe, e.install, {
+      cwd: paths.root,
+      onLine: (stream, text) => onLine?.(stream, text),
+      timeoutMs: PIP_TIMEOUT_MS,
+      signal,
+    });
+
+    try {
+      assertInstallOk(r, `安装 ${sourceLabel(e.install)}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failed.push(message);
+      onLine?.("stderr", message);
+    }
+  }
+
+  if (failed.length > 0) {
+    throw new Error(`源码依赖安装失败：\n${failed.join("\n")}`);
   }
 
   onLine?.("system", `[依赖] ${dirName} 的依赖安装完成。`);
@@ -882,37 +979,39 @@ export function isSafeNodeDirName(name: string): boolean {
  * 依赖查看 / 版本切换
  * ══════════════════════════════════════════════════════════ */
 
-/** 一次 python 调用把所有已安装包名→版本捞出来（依赖面板用） */
+/** 一次 python 调用把所有已安装包的 名称→版本 与 direct_url.json 地址→版本 捞出来（依赖面板用） */
 const INSTALLED_VERSIONS_SCRIPT = `
 import json
 from importlib import metadata
-out = {}
+versions = {}
+direct_urls = {}
 for dist in metadata.distributions():
     try:
         name = dist.metadata['Name']
         ver = dist.version
     except Exception:
         continue
-    if name:
-        out[name.lower().replace('_', '-').replace('.', '-')] = ver
-print("${DEPS_MARKER}" + json.dumps(out))
+    if not name:
+        continue
+    versions[name.lower().replace('_', '-').replace('.', '-')] = ver
+    try:
+        raw = dist.read_text('direct_url.json')
+    except Exception:
+        raw = None
+    if not raw:
+        continue
+    try:
+        url = json.loads(raw).get('url')
+    except Exception:
+        continue
+    if url:
+        direct_urls[url] = ver
+print("${DEPS_MARKER}" + json.dumps({"versions": versions, "directUrls": direct_urls}))
 `;
 
 /** 和 python 侧同样的规范化：小写、下划线与点都算连字符 */
 function normPkg(name: string): string {
   return name.toLowerCase().replaceAll("_", "-").replaceAll(".", "-");
-}
-
-/** 从 "pillow>=11.0.0  # 注释" 里取出 ">=11.0.0" */
-function specOf(raw: string): string {
-  const noComment = raw.split("#")[0].trim();
-
-  const rest = noComment
-    .replace(/^[A-Za-z0-9._-]+\s*(\[[^\]]*\])?/, "")
-    .split(";")[0]
-    .trim();
-
-  return rest;
 }
 
 /** 单个插件的依赖明细：requirements.txt 声明 vs 实际装到的版本 */
@@ -923,7 +1022,7 @@ export async function nodeDepsDetail(
   const paths = resolveComfyPaths(root);
   const dir = join(paths.customNodesDir, dirName);
   const lines = await readRequirements(dir);
-  const entries = toRequirementEntries(lines);
+  const entries = lines.map(parseRequirement);
 
   const out: NodeDepsDetail = {
     dirName,
@@ -962,24 +1061,41 @@ export async function nodeDepsDetail(
     return out;
   }
 
-  let installed: Record<string, string> = {};
+  let dists: InstalledDists = { versions: {}, directUrls: {} };
 
   try {
-    installed = JSON.parse(line.slice(DEPS_MARKER.length)) as Record<
-      string,
-      string
-    >;
+    const data = JSON.parse(line.slice(DEPS_MARKER.length)) as {
+      versions?: Record<string, string>;
+      directUrls?: Record<string, string>;
+    };
+
+    dists = {
+      versions: data.versions ?? {},
+      directUrls: data.directUrls ?? {},
+    };
   } catch {
     out.error = "读取已安装版本失败（返回内容无法解析）。";
 
     return out;
   }
 
-  out.entries = entries.map((e) => ({
-    name: e.name,
-    spec: specOf(e.raw),
-    installed: installed[normPkg(e.name)] ?? null,
-  }));
+  out.entries = entries.map((e) =>
+    e.kind === "source"
+      ? {
+          name: sourceLabel(e.install),
+          spec: "源码",
+          installed: installedSourceVersion(e.install, dists),
+          source: true,
+          install: e.install,
+        }
+      : {
+          name: e.name,
+          spec: e.spec,
+          installed: dists.versions[normPkg(e.name)] ?? null,
+          source: false,
+          install: e.install,
+        }
+  );
 
   return out;
 }
@@ -1147,20 +1263,29 @@ export async function checkoutNode(
   }
 }
 
-/** 装/重装单个依赖包（依赖浮层里每一行那个按钮） */
+/** pip 规格：包名 + 可选 extras + 可选版本约束 */
+const PACKAGE_TARGET =
+  /^[A-Za-z0-9][A-Za-z0-9._-]*(\[[A-Za-z0-9._, -]+\])?\s*((===|==|>=|<=|!=|~=|>|<)[A-Za-z0-9.*+!_-]+(\s*,\s*(===|==|>=|<=|!=|~=|>|<)[A-Za-z0-9.*+!_-]+)*)?$/;
+
+/**
+ * 装/重装单个依赖（依赖浮层里每一行那个按钮）。
+ * 参数就是交给 pip 的那一条规格：普通包是 `名[extras]约束`，直接引用是整行 `git+https://…`。
+ */
 export async function installOneNodeDep(
   root: string,
   dirName: string,
-  name: string,
-  spec: string,
+  target: string,
   onLine?: (s: LogStream, t: string) => void,
   signal?: AbortSignal
 ): Promise<void> {
   requireStopped("安装依赖");
 
-  // 包名要进命令行参数：只允许 pip 认得的字符
-  if (!/^[A-Za-z0-9._-]{1,120}$/.test(name)) {
-    throw new Error(`非法的依赖包名：${name}`);
+  const spec = target.trim();
+  const direct = isDirectRequirement(spec);
+
+  // 规格要进命令行参数：只放行 pip 认得的包格式或直接引用
+  if (!direct && !PACKAGE_TARGET.test(spec)) {
+    throw new Error(`非法的依赖规格：${spec}`);
   }
 
   const paths = resolveComfyPaths(root);
@@ -1173,33 +1298,21 @@ export async function installOneNodeDep(
     throw new Error(`未找到内置解释器：${paths.pythonExe}`);
   }
 
-  const target = `${name}${spec}`;
-  onLine?.("system", `[依赖] 安装 ${target}…`);
+  onLine?.("system", `[依赖] 安装 ${spec}…`);
 
-  const r = await pipInstallPackages(paths.pythonExe, [target], {
-    cwd: paths.root,
-    onLine,
-    signal,
-  });
+  const r = direct
+    ? await pipInstallSource(paths.pythonExe, spec, {
+        cwd: paths.root,
+        onLine,
+        signal,
+      })
+    : await pipInstallPackages(paths.pythonExe, [spec], {
+        cwd: paths.root,
+        onLine,
+        signal,
+      });
 
-  if (r.spawnError) {
-    throw new Error(`无法启动 pip：${r.spawnError}`);
-  }
-  if (r.timedOut) {
-    throw new Error("pip 安装超时");
-  }
-  if (r.aborted) {
-    throw new Error("pip 安装已取消");
-  }
-  if (r.code !== 0) {
-    const tail = (r.stderr || r.stdout)
-      .trim()
-      .split(/\r?\n/)
-      .slice(-6)
-      .join("\n");
-
-    throw new Error(`安装 ${target} 失败（退出码 ${r.code}）\n${tail}`);
-  }
+  assertInstallOk(r, `安装 ${direct ? sourceLabel(spec) : spec}`);
 }
 
 /**

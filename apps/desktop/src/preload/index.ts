@@ -240,14 +240,10 @@ const api: LauncherApi = {
     ipcRenderer.invoke(IPC.nodesReinstallAllDeps, root) as Promise<
       OpResult<string[]>
     >,
-  nodeDepInstall: async (dirName, name, spec, root) =>
-    ipcRenderer.invoke(
-      IPC.nodesDepInstall,
-      dirName,
-      name,
-      spec,
-      root
-    ) as Promise<OpResult<null>>,
+  nodeDepInstall: async (dirName, target, root) =>
+    ipcRenderer.invoke(IPC.nodesDepInstall, dirName, target, root) as Promise<
+      OpResult<null>
+    >,
 
   /* ---- 环境管理 ---- */
   listPipPackages: async (root) =>

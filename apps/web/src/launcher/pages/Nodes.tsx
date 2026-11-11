@@ -1517,24 +1517,23 @@ function DepCell({
     }, 200);
   };
 
-  const install = async (name: string, spec: string): Promise<void> => {
-    setBusy(name);
+  const install = async (target: string, label: string): Promise<void> => {
+    setBusy(target);
 
     try {
       const res = await window.launcher.nodeDepInstall(
         node.dirName,
-        name,
-        spec,
+        target,
         root
       );
 
       if (!res.ok) {
-        pushToast(`安装 ${name} 失败：${res.error}`, "error");
+        pushToast(`安装 ${label} 失败：${res.error}`, "error");
 
         return;
       }
 
-      pushToast(`依赖 ${name} 安装完成`);
+      pushToast(`依赖 ${label} 安装完成`);
       await load(true);
       onDepsChanged?.();
     } finally {
@@ -1586,11 +1585,11 @@ function DepCell({
             <div className="deppop__err">{detail.error}</div>
           ) : (
             detail.entries.map((d) => (
-              <div className="deppop__row" key={d.name}>
+              <div className="deppop__row" key={d.install}>
                 <span
                   className={`deppop__dot${d.installed ? " deppop__dot--ok" : " deppop__dot--warn"}`}
                 />
-                <span className="mono ellipsis" title={d.name}>
+                <span className="mono ellipsis" title={d.install}>
                   {d.name}
                 </span>
                 <span className="dim mono">{d.spec || "不限"}</span>
@@ -1601,11 +1600,11 @@ function DepCell({
                   disabled={busy !== null}
                   onClick={() =>
                     proceed(`安装依赖 ${d.name}`, async () =>
-                      install(d.name, d.spec)
+                      install(d.install, d.name)
                     )
                   }
                 >
-                  {busy === d.name ? "…" : d.installed ? "重装" : "安装"}
+                  {busy === d.install ? "…" : d.installed ? "重装" : "安装"}
                 </button>
               </div>
             ))

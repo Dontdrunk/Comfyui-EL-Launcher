@@ -515,7 +515,8 @@ function diffRequirements(
     const m = new Map<string, string>();
 
     for (const e of toRequirementEntries(lines ?? [])) {
-      m.set(e.name, e.raw);
+      // 直接引用没有包名，按交给 pip 的完整规格做键，两条源码依赖才不会被折叠成一条
+      m.set(e.install, e.raw);
     }
     return m;
   };

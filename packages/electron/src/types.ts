@@ -507,11 +507,16 @@ export interface NodeDepsEntry {
 
 /** 单个插件的依赖明细：requirements.txt 声明 vs 实际装到的版本 */
 export interface NodeDepLine {
+  /** 包名；直接引用没有包名，用仓库名（`facebookresearch/sam2`） */
   name: string;
-  /** requirements.txt 里写的版本约束，没写就是空串 */
+  /** 展示用约束：版本约束，直接引用显示「源码」 */
   spec: string;
   /** 实际装到的版本；未安装为 null */
   installed: string | null;
+  /** true = requirements 里直接引用仓库（pip 会去 clone），不按包名查索引 */
+  source: boolean;
+  /** 交给 `pip install` 的完整规格，渲染进程原样回传 */
+  install: string;
 }
 
 export interface NodeDepsDetail {
@@ -789,8 +794,7 @@ export interface LauncherApi {
   ): Promise<OpResult<null>>;
   nodeDepInstall(
     dirName: string,
-    name: string,
-    spec: string,
+    target: string,
     root?: string
   ): Promise<OpResult<null>>;
   reinstallAllNodeDeps(root?: string): Promise<OpResult<string[]>>;

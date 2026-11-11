@@ -201,7 +201,7 @@ export async function readNodeManifest(dir: string): Promise<NodeManifest> {
   return blank;
 }
 
-/** 读取 requirements.txt 中的依赖包名 */
+/** 读取 requirements.txt 中的声明行（注释与 pip 选项行已剔除） */
 export async function readRequirements(dir: string): Promise<string[]> {
   const file = join(dir, "requirements.txt");
 
@@ -215,14 +215,6 @@ export async function readRequirements(dir: string): Promise<string[]> {
   }
 }
 
-/** 解析 requirements 文本为「包名 + 原始行」列表 */
-export interface RequirementEntry {
-  /** 规范化后的包名（小写、去 extras） */
-  name: string;
-  /** 原始声明行，用于展示与安装 */
-  raw: string;
-}
-
 export function parseRequirements(text: string): string[] {
   return text
     .split(/\r?\n/)
@@ -230,14 +222,143 @@ export function parseRequirements(text: string): string[] {
     .filter((l) => l.length > 0 && !l.startsWith("#") && !l.startsWith("-"));
 }
 
-/** 从 "torch>=2.0 ; python_version>'3.8'" 这类声明里提取包名 */
-export function requirementName(raw: string): string {
-  const cleaned = raw.split(";")[0].trim();
-  const m = /^([A-Za-z0-9._-]+)/.exec(cleaned);
+/**
+ * 直接引用：pip 按地址去 clone 仓库或读本地目录，不拿包名查索引。
+ * 例：`git+https://github.com/facebookresearch/sam2`（Impact Pack 的 SAM 2 就是这么装的）。
+ */
+const DIRECT_REF = /^(?:(?:git|hg|svn|bzr)\+|https?:\/\/|file:|\.{1,2}[\\/])/i;
 
-  return (m ? m[1] : cleaned).toLowerCase().replaceAll("_", "-");
+export function isDirectRequirement(raw: string): boolean {
+  return DIRECT_REF.test(raw.trim());
+}
+
+type RequirementKind = "package" | "source";
+
+export interface RequirementEntry {
+  /** package：按包名走索引；source：直接引用仓库或本地目录 */
+  kind: RequirementKind;
+  /** 包名（小写、去 extras）；source 为空串 */
+  name: string;
+  /** 版本约束（`>=1.0`、`==2.1,!=2.2`）；不写约束或 source 时为空串 */
+  spec: string;
+  /** 交给 `pip install` 的完整规格 */
+  install: string;
+  /** 原始声明行 */
+  raw: string;
+}
+
+/**
+ * 直接引用的归一化地址：去掉 `git+` 之类的前缀、`#egg=` 片段与 `@修订号`。
+ * pip 记进 direct_url.json 的 url 就是这一份，装没装靠它比对。
+ */
+function directUrlOf(ref: string): string | null {
+  const bare = ref
+    .trim()
+    .split("#")[0]
+    .trim()
+    .replace(/^(?:git|hg|svn|bzr)\+/i, "");
+  // `@` 后面是分支/标签/提交，不是地址的一部分
+  const repo = bare.replace(/@[^/@]+$/, "");
+
+  return /^(?:https?|ssh|git|file):\/\//i.test(repo) ? repo : null;
+}
+
+/** 地址比对前统一大小写、`.git` 后缀与结尾斜杠 */
+function normalizeSourceUrl(url: string): string {
+  return url
+    .trim()
+    .toLowerCase()
+    .replace(/\/+$/, "")
+    .replace(/\.git$/, "")
+    .replace(/\/+$/, "");
+}
+
+/** 直接引用的展示名：地址最后两段（`facebookresearch/sam2`） */
+export function sourceLabel(ref: string): string {
+  const path = ref
+    .trim()
+    .split("#")[0]
+    .replace(/^(?:git|hg|svn|bzr)\+/i, "")
+    .replace(/^[a-z]+:\/\//i, "")
+    .replace(/\.git$/i, "")
+    .replace(/[\\/]+$/, "");
+  const parts = path.split(/[\\/]/).filter((p) => p.length > 0);
+
+  return parts.slice(-2).join("/") || ref.trim();
+}
+
+/** 包名与仓库名比对用：只留字母数字（`SAM-2` 与 `sam2` 视为同一个） */
+function lettersOf(name: string): string {
+  return name.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
+}
+
+/** 解析一条依赖声明：包依赖拆成 名称/约束/完整规格，直接引用整行交给 pip */
+export function parseRequirement(raw: string): RequirementEntry {
+  const line = raw.trim();
+
+  if (isDirectRequirement(line)) {
+    // 地址里没有空白，`;` 只可能引入环境标记
+    const install = line.split(";")[0].trim();
+
+    return {
+      kind: "source",
+      name: "",
+      spec: "",
+      install,
+      raw: line,
+    };
+  }
+
+  const cleaned = line.split("#")[0].split(";")[0].trim();
+  const m = /^([A-Za-z0-9._-]+)(\s*\[[^\]]*\])?(.*)$/.exec(cleaned);
+
+  return {
+    kind: "package",
+    name: (m?.[1] ?? cleaned).toLowerCase().replaceAll("_", "-"),
+    spec: (m?.[3] ?? "").trim(),
+    install: cleaned,
+    raw: line,
+  };
 }
 
 export function toRequirementEntries(lines: string[]): RequirementEntry[] {
-  return lines.map((raw) => ({ name: requirementName(raw), raw }));
+  return lines.map(parseRequirement);
+}
+
+/** 已安装的发行信息：归一化包名 → 版本，direct_url.json 地址 → 版本 */
+export interface InstalledDists {
+  versions: Record<string, string>;
+  directUrls: Record<string, string>;
+}
+
+/**
+ * 直接引用装没装、装的是哪个版本。
+ * 先比对 direct_url.json 的地址；对不上再按包名比对 —— 手动 `pip install .` 装源码包时
+ * 记的是本地路径，和声明里的 git 地址不同，但发行包名与仓库名一致。
+ * 相对路径这类没有地址的直接引用只能走包名那一趟。
+ */
+export function installedSourceVersion(
+  ref: string,
+  dists: InstalledDists
+): string | null {
+  const url = directUrlOf(ref) ?? ref.trim();
+  const want = normalizeSourceUrl(url);
+
+  for (const [recorded, version] of Object.entries(dists.directUrls)) {
+    if (normalizeSourceUrl(recorded) === want) {
+      return version;
+    }
+  }
+
+  const repo = lettersOf(sourceLabel(url).split("/").at(-1) ?? "");
+
+  if (repo) {
+    for (const [name, version] of Object.entries(dists.versions)) {
+      if (lettersOf(name) === repo) {
+        return version;
+      }
+    }
+  }
+
+  return null;
 }

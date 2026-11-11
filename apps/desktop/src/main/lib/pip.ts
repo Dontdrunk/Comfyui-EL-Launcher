@@ -41,6 +41,28 @@ export async function pipInstall(
   return await pipRun(pythonExe, args, base);
 }
 
+/**
+ * 装一条直接引用（`git+https://…`）。
+ * 关掉构建隔离：上游常把 torch 之类写进 build-system.requires，pip 会为构建单独下一份
+ * 大包（sam2 就是这样），既慢又可能带进和现有 CUDA 环境不匹配的版本。
+ */
+export async function pipInstallSource(
+  pythonExe: string,
+  target: string,
+  opts: PipOptions = {}
+): Promise<RunResult> {
+  return await pipRun(
+    pythonExe,
+    ["-s", "-m", "pip", "install", "--upgrade", "--no-build-isolation", target],
+    {
+      cwd: opts.cwd,
+      onLine: opts.onLine,
+      timeoutMs: opts.timeoutMs ?? 1_800_000,
+      signal: opts.signal,
+    }
+  );
+}
+
 /** 装单个包（依赖浮层里那一行的「安装 / 重装」）；specs 形如 ["pillow>=11.0.0"] */
 export async function pipInstallPackages(
   pythonExe: string,

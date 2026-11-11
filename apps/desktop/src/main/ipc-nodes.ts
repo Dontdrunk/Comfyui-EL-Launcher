@@ -290,7 +290,6 @@ export function registerNodesIpc(): void {
     async (
       _e,
       dirName: string,
-      name: string,
       spec: string,
       root?: string
     ): Promise<OpResult<null>> => {
@@ -299,13 +298,12 @@ export function registerNodesIpc(): void {
 
       return await runOp(
         "node-dep-install",
-        `安装依赖 ${name}`,
+        `安装依赖 ${spec}`,
         async (ctx) => {
           await installOneNodeDep(
             target,
             dirName,
-            name,
-            spec ?? "",
+            spec,
             (stream, text) => {
               ctx.log(text, stream);
             },
