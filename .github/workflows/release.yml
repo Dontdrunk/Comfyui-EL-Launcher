@@ -1,0 +1,62 @@
+# 打 v* 标签 → 在 Windows 上构建安装版 / 便携版 → 发布到 GitHub Release。
+#
+# 自更新（apps/desktop/src/main/services/selfUpdate.ts）只认这个 Release 里的
+# latest.yml 与两个 exe，所以不要改成 draft、不要漏传 latest.yml。
+# 发布失败时在 Actions 页面点「Re-run failed jobs」即可，不需要重新打标签。
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.16.1
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.13.0
+          cache: pnpm
+
+      # 标签和 package.json 版本不一致时直接失败：否则会发出一个版本号对不上的包
+      - name: 校验标签与 package.json 版本一致
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "标签 ${GITHUB_REF_NAME} 与 package.json 版本 v${version} 不一致" >&2
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 静态检查与单测
+        run: |
+          pnpm exec vp check
+          pnpm exec vp test
+
+      - name: 构建安装包
+        run: pnpm run package:desktop
+
+      - name: 发布 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            apps/desktop/release/ExplorerLauncher-*-setup.exe
+            apps/desktop/release/ExplorerLauncher-*-portable.exe
+            apps/desktop/release/ExplorerLauncher-*-setup.exe.blockmap
+            apps/desktop/release/latest.yml
