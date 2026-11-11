@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -191,6 +191,50 @@ test("a model shortcut keeps its renamed title across restarts", async () => {
     await first.application.close().catch(() => null);
     await second?.application.close().catch(() => null);
     await rm(userData, { force: true, recursive: true });
+  }
+});
+
+test("an uninstall that empties the plugin filter keeps the search box reachable", async () => {
+  const comfyRoot = await mkdtemp(
+    path.join(os.tmpdir(), "explorer-launcher-comfy-")
+  );
+
+  const customNodes = path.join(comfyRoot, "ComfyUI", "custom_nodes");
+
+  await Promise.all(
+    ["PluginAlpha", "PluginBeta", "PluginGamma"].map(
+      async (dirName) =>
+        await mkdir(path.join(customNodes, dirName), { recursive: true })
+    )
+  );
+
+  const launched = await launch({ comfyRoot });
+
+  try {
+    const { page } = launched;
+
+    await page.getByRole("link", { name: "插件管理" }).click();
+    await expect(page).toHaveURL(/\/nodes$/u);
+
+    const rows = page.locator("tbody tr");
+    const search = page.locator(".table__search-input");
+
+    await expect(rows).toHaveCount(3);
+    await search.fill("PluginAlpha");
+    await expect(rows).toHaveCount(1);
+
+    await page.getByRole("button", { name: "卸载" }).click();
+    await page.getByRole("button", { name: "移入回收站" }).click();
+
+    // 卸载刷新后筛选条件仍指向刚删掉的插件：搜索框必须还在，否则筛选永远清不掉
+    await expect(page.getByText("没有匹配的插件")).toBeVisible();
+    await expect(search).toHaveValue("PluginAlpha");
+
+    await search.fill("");
+    await expect(rows).toHaveCount(2);
+  } finally {
+    await close(launched);
+    await rm(comfyRoot, { force: true, recursive: true });
   }
 });
 

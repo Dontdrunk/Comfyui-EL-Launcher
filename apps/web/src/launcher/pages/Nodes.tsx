@@ -797,8 +797,6 @@ export default function Nodes(): React.JSX.Element {
                 </button>
               }
             />
-          ) : visible.length === 0 ? (
-            <Empty title="没有匹配的插件" />
           ) : (
             <div className="table-wrap">
               <table className="table">
@@ -856,6 +854,16 @@ export default function Nodes(): React.JSX.Element {
                   </tr>
                 </thead>
                 <tbody>
+                  {visible.length === 0 && (
+                    <tr>
+                      <td colSpan={7}>
+                        <Empty
+                          title="没有匹配的插件"
+                          hint={`没有插件名称或远程地址包含「${filter.trim()}」。清空上方搜索框即可显示全部 ${installed.length} 个插件。`}
+                        />
+                      </td>
+                    </tr>
+                  )}
                   {visible.map((n) => {
                     const up = updates[n.dirName];
 
