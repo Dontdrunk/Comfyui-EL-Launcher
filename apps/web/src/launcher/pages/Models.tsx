@@ -59,7 +59,6 @@ export default function Models(): React.JSX.Element {
   /** 首次扫描是否已经跑完：没跑完就别渲染「没有可扫描的目录」 */
   const [scanned, setScanned] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ModelNode | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const scanGen = useRef(0);
 
   const runScan = useCallback(async (): Promise<void> => {
@@ -71,7 +70,6 @@ export default function Models(): React.JSX.Element {
 
     const gen = ++scanGen.current;
     setScanning(true);
-    setError(null);
 
     try {
       const next = await window.launcher.scanModels(root);
@@ -80,20 +78,19 @@ export default function Models(): React.JSX.Element {
         return;
       }
       setReport(next);
-
-      if (next.error) {
-        setError(next.error);
-      }
     } catch (error_) {
       if (gen !== scanGen.current) return;
-      setError(error_ instanceof Error ? error_.message : String(error_));
+      pushToast(
+        `扫描模型目录失败：${error_ instanceof Error ? error_.message : String(error_)}`,
+        "error"
+      );
     } finally {
       if (gen === scanGen.current) {
         setScanning(false);
         setScanned(true);
       }
     }
-  }, [root]);
+  }, [pushToast, root]);
 
   useEffect(() => {
     if (!root) {
@@ -118,7 +115,10 @@ export default function Models(): React.JSX.Element {
       await window.launcher.deleteModelFile(target.relative, root);
       await runScan();
     } catch (error_) {
-      setError(error_ instanceof Error ? error_.message : String(error_));
+      pushToast(
+        `删除模型失败：${error_ instanceof Error ? error_.message : String(error_)}`,
+        "error"
+      );
     }
   };
 
@@ -186,18 +186,6 @@ export default function Models(): React.JSX.Element {
 
   return (
     <>
-      {error && (
-        <Notice tone="error" title="操作失败">
-          {error}
-        </Notice>
-      )}
-
-      {!root && (
-        <Notice tone="warn" title="还没有指定 ComfyUI 目录">
-          到「设置」里指定之后，这里会自动扫描其中的 models 目录。
-        </Notice>
-      )}
-
       <Readouts cols={2}>
         <Readout
           label="模型总占用"
@@ -238,7 +226,9 @@ export default function Models(): React.JSX.Element {
         title={scanning && !report ? "正在扫描模型目录" : "模型目录"}
       >
         {report ? (
-          report.error ? null : report.entries.length === 0 ? (
+          report.error ? (
+            <Empty title="模型目录读取失败" hint={report.error} />
+          ) : report.entries.length === 0 ? (
             <Empty
               title="模型目录是空的"
               hint="models 下面还没有文件夹或模型文件。"

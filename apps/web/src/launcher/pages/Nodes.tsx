@@ -74,10 +74,11 @@ export default function Nodes(): React.JSX.Element {
   const [depsReport, setDepsReport] = useState<NodeDepsReport | null>(null);
   const [depsLoading, setDepsLoading] = useState(false);
 
+  /** 版本状态按逻辑名存：开关插件只改目录名，不该把「最新/更新」弄丢 */
   const [updates, setUpdates] = useState<Record<string, NodeUpdateInfo>>({});
   const [updating, setUpdating] = useState(false);
-  /** 正在单独更新的插件目录名 */
-  const [updatingDir, setUpdatingDir] = useState<string | null>(null);
+  /** 正在单独更新的插件（逻辑名） */
+  const [updatingBase, setUpdatingBase] = useState<string | null>(null);
 
   const [regQuery, setRegQuery] = useState("");
   const [regResult, setRegResult] = useState<RegistrySearchResult | null>(null);
@@ -115,13 +116,12 @@ export default function Nodes(): React.JSX.Element {
   const [gitUrl, setGitUrl] = useState("");
 
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  /** 正在改启用状态的行：只锁这一行，连点不会发两次 */
+  const [togglingDir, setTogglingDir] = useState<string | null>(null);
 
   const [uninstallTarget, setUninstallTarget] = useState<InstalledNode | null>(
     null
   );
-
-  const [lastInstall, setLastInstall] = useState<InstallResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   /* 版本切换面板 */
   const [verTarget, setVerTarget] = useState<InstalledNode | null>(null);
@@ -143,13 +143,16 @@ export default function Nodes(): React.JSX.Element {
 
       return list;
     } catch (error_) {
-      setError(error_ instanceof Error ? error_.message : String(error_));
+      pushToast(
+        `读取插件目录失败：${error_ instanceof Error ? error_.message : String(error_)}`,
+        "error"
+      );
 
       return null;
     } finally {
       setLoading(false);
     }
-  }, [root]);
+  }, [pushToast, root]);
 
   useEffect(() => {
     void refresh();
@@ -219,30 +222,34 @@ export default function Nodes(): React.JSX.Element {
       }
       setUpdating(true);
 
-      if (!quiet) {
-        setError(null);
-      }
       try {
         const list = await window.launcher.checkNodeUpdates(root);
         const map: Record<string, NodeUpdateInfo> = {};
 
         for (const u of list) {
-          map[u.dirName] = u;
+          map[u.baseName] = u;
         }
         setUpdates(map);
         const failed = list.filter((u) => u.error);
 
         if (!quiet && list.length > 0 && failed.length === list.length) {
-          setError(failed[0]?.error ?? "检查更新失败");
+          pushToast(
+            `检查插件更新失败：${failed[0]?.error ?? "未知原因"}`,
+            "error"
+          );
         }
       } catch (error_) {
-        if (!quiet)
-          setError(error_ instanceof Error ? error_.message : String(error_));
+        if (!quiet) {
+          pushToast(
+            `检查插件更新失败：${error_ instanceof Error ? error_.message : String(error_)}`,
+            "error"
+          );
+        }
       } finally {
         setUpdating(false);
       }
     },
-    [root]
+    [pushToast, root]
   );
 
   /*
@@ -288,10 +295,6 @@ export default function Nodes(): React.JSX.Element {
     handledRef.current = activeJob.id;
     void refresh();
 
-    if (activeJob.status === "succeeded" && activeJob.kind === "node-install") {
-      setLastInstall(null);
-    }
-
     /* 批量里部分成功也算任务失败，但已更新的插件要把角标刷掉，所以不看状态 */
     if (
       activeJob.kind === "node-update" ||
@@ -304,7 +307,6 @@ export default function Nodes(): React.JSX.Element {
   const startJob = (res: { jobId: string }): void => {
     handledRef.current = null;
     setActiveJobId(res.jobId);
-    setError(null);
   };
 
   /* ── 操作 ── */
@@ -312,17 +314,19 @@ export default function Nodes(): React.JSX.Element {
   const runSearch = useCallback(
     async (q: string, page: number, limit: number): Promise<void> => {
       setRegLoading(true);
-      setError(null);
 
       try {
         setRegResult(await window.launcher.searchRegistry(q, page, limit));
       } catch (error_) {
-        setError(error_ instanceof Error ? error_.message : String(error_));
+        pushToast(
+          `搜索插件失败：${error_ instanceof Error ? error_.message : String(error_)}`,
+          "error"
+        );
       } finally {
         setRegLoading(false);
       }
     },
-    []
+    [pushToast]
   );
 
   /* 首次进入搜索页给一批热门结果（Registry 支持空关键字） */
@@ -446,14 +450,12 @@ export default function Nodes(): React.JSX.Element {
     const res = await window.launcher.installFromRegistry(node.id, root);
 
     if (!res.ok) {
-      setError(res.error);
       pushToast(`安装 ${node.name} 失败：${res.error}`, "error");
       startJob(res);
 
       return;
     }
 
-    setLastInstall(res.value);
     toastInstall(node.name, res.value);
     startJob(res);
   };
@@ -470,14 +472,12 @@ export default function Nodes(): React.JSX.Element {
     );
 
     if (!res.ok) {
-      setError(res.error);
       pushToast(`从 Git 安装失败：${res.error}`, "error");
       startJob(res);
 
       return;
     }
 
-    setLastInstall(res.value);
     toastInstall(res.value.dirName, res.value);
     setGitUrl("");
     startJob(res);
@@ -487,26 +487,49 @@ export default function Nodes(): React.JSX.Element {
     if (!root) {
       return;
     }
-    setError(null);
+    const nextEnabled = !node.enabled;
+    /** 按点击时的物理目录定位这一行（成功后 dirName 会变，插件还是同一个） */
+    const patch = (fields: Partial<InstalledNode>): void => {
+      setInstalled((prev) =>
+        prev.map((n) => (n.dirName === node.dirName ? { ...n, ...fields } : n))
+      );
+    };
+
+    /* 先把开关拨过去再等 IPC：改名要几毫秒，等结果回来才动会像没点到 */
+    patch({ enabled: nextEnabled });
+    setTogglingDir(node.dirName);
 
     try {
-      setInstalled(
-        await window.launcher.setNodeEnabled(node.dirName, !node.enabled, root)
+      patch(
+        await window.launcher.setNodeEnabled(node.dirName, nextEnabled, root)
       );
       pushToast(`已${node.enabled ? "禁用" : "启用"} ${node.baseName}`);
     } catch (error_) {
       const message = error_ instanceof Error ? error_.message : String(error_);
-      setError(message);
+      patch({ enabled: node.enabled });
       pushToast(`操作失败：${message}`, "error");
+    } finally {
+      setTogglingDir(null);
+    }
+  };
+
+  /** 插件名直接打开它在 custom_nodes 下的实际目录（禁用中的目录带 .disabled 后缀） */
+  const openNodeDir = async (node: InstalledNode): Promise<void> => {
+    try {
+      await window.launcher.openPath(node.path);
+    } catch (error_) {
+      pushToast(
+        `打开插件目录失败：${error_ instanceof Error ? error_.message : String(error_)}`,
+        "error"
+      );
     }
   };
 
   const doUpdateOne = async (node: InstalledNode): Promise<void> => {
-    if (!root || updatingDir) {
+    if (!root || updatingBase) {
       return;
     }
-    setUpdatingDir(node.dirName);
-    setError(null);
+    setUpdatingBase(node.baseName);
 
     try {
       const res = await window.launcher.updateNode(node.dirName, root);
@@ -514,11 +537,11 @@ export default function Nodes(): React.JSX.Element {
       if (res.ok) {
         pushToast(`插件 ${node.baseName} 已更新（重启 ComfyUI 后生效）`);
         setUpdates((prev) => {
-          const cur = prev[node.dirName];
+          const cur = prev[node.baseName];
           if (!cur?.remoteCommit) return prev;
           return {
             ...prev,
-            [node.dirName]: {
+            [node.baseName]: {
               ...cur,
               hasUpdate: false,
               localCommit: cur.remoteCommit,
@@ -527,12 +550,11 @@ export default function Nodes(): React.JSX.Element {
           };
         });
       } else {
-        setError(res.error);
         pushToast(`更新 ${node.baseName} 失败：${res.error}`, "error");
       }
       startJob(res);
     } finally {
-      setUpdatingDir(null);
+      setUpdatingBase(null);
     }
   };
 
@@ -552,7 +574,6 @@ export default function Nodes(): React.JSX.Element {
       );
     } else {
       /* 只要有插件更新失败，主进程就整批算失败，error 里带成功数与失败原因 */
-      setError(res.error);
       pushToast(res.error, "error");
     }
     startJob(res);
@@ -565,7 +586,6 @@ export default function Nodes(): React.JSX.Element {
     const res = await window.launcher.reinstallAllNodeDeps(root);
 
     if (!res.ok) {
-      setError(res.error);
       pushToast(`重装插件依赖失败：${res.error}`, "error");
 
       return;
@@ -590,7 +610,6 @@ export default function Nodes(): React.JSX.Element {
     if (res.ok) {
       pushToast(`插件 ${node.baseName} 已卸载`);
     } else {
-      setError(res.error);
       pushToast(`卸载 ${node.baseName} 失败：${res.error}`, "error");
     }
     startJob(res);
@@ -640,7 +659,6 @@ export default function Nodes(): React.JSX.Element {
       const res = await window.launcher.nodeCheckout(node.dirName, ref, root);
 
       if (!res.ok) {
-        setError(res.error);
         pushToast(
           `切换 ${node.baseName} 到 ${label} 失败：${res.error}`,
           "error"
@@ -718,20 +736,6 @@ export default function Nodes(): React.JSX.Element {
 
   return (
     <>
-      {error && (
-        <Notice tone="error" title="操作失败">
-          {error}
-        </Notice>
-      )}
-
-      {lastInstall && lastInstall.warnings.length > 0 && (
-        <Notice tone="warn" title="安装完成，但有需要注意的地方">
-          {lastInstall.warnings.map((w, i) => (
-            <div key={i}>{w}</div>
-          ))}
-        </Notice>
-      )}
-
       {/* ── 标签页 ── */}
       <div className="section-title">插件操作</div>
       <Panel
@@ -865,13 +869,16 @@ export default function Nodes(): React.JSX.Element {
                     </tr>
                   )}
                   {visible.map((n) => {
-                    const up = updates[n.dirName];
+                    const up = updates[n.baseName];
 
+                    /* 用逻辑名做 key：启用/禁用只改目录名，行不该重建，
+                       否则开关是新建的 DOM，永远看不到过渡动画 */
                     return (
-                      <tr key={n.dirName}>
+                      <tr key={n.baseName}>
                         <td>
                           <Switch
                             checked={n.enabled}
+                            disabled={togglingDir === n.dirName}
                             onChange={() =>
                               guard.proceed("修改插件启用状态", async () =>
                                 doToggle(n)
@@ -881,17 +888,25 @@ export default function Nodes(): React.JSX.Element {
                         </td>
                         <td>
                           <div className="row" style={{ gap: 6, minWidth: 0 }}>
-                            <strong className="ellipsis" title={n.baseName}>
+                            <button
+                              type="button"
+                              className="plugin-name ellipsis"
+                              title={`在文件管理器中打开 ${n.path}`}
+                              onClick={() => void openNodeDir(n)}
+                            >
                               {n.displayName ?? n.baseName}
-                            </strong>
+                            </button>
                           </div>
                           {n.displayName && (
-                            <div
-                              className="mono dim ellipsis"
+                            <button
+                              type="button"
+                              className="plugin-name plugin-name--dim mono ellipsis"
                               style={{ fontSize: "var(--fs-xs)" }}
+                              title={`在文件管理器中打开 ${n.path}`}
+                              onClick={() => void openNodeDir(n)}
                             >
                               {n.baseName}
-                            </div>
+                            </button>
                           )}
                         </td>
                         <td>
@@ -919,8 +934,8 @@ export default function Nodes(): React.JSX.Element {
                           <div className="table__actions">
                             <NodeVersionMark
                               info={up}
-                              busy={updatingDir === n.dirName}
-                              locked={updatingDir !== null}
+                              busy={updatingBase === n.baseName}
+                              locked={updatingBase !== null}
                               onUpdate={() =>
                                 guard.proceed(
                                   `更新插件 ${n.baseName}`,

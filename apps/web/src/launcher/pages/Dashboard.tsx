@@ -47,7 +47,6 @@ export default function Dashboard(): React.JSX.Element {
   );
 
   const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [selfUpdate, setSelfUpdate] = useState<SelfUpdateStatus | null>(null);
   const [updatePercent, setUpdatePercent] = useState<number | null>(null);
   const [killConfirm, setKillConfirm] = useState(false);
@@ -113,14 +112,16 @@ export default function Dashboard(): React.JSX.Element {
       return;
     }
     setBusy(true);
-    setActionError(null);
 
     try {
       // 用当前表单值启动，保证「改了没保存」也能立刻生效
       await patchSettings({ launch: form });
       await startService(form);
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : String(error));
+      pushToast(
+        `启动失败：${error instanceof Error ? error.message : String(error)}`,
+        "error"
+      );
     } finally {
       setBusy(false);
     }
@@ -129,14 +130,16 @@ export default function Dashboard(): React.JSX.Element {
   /** 端口被别人占着：确认后结束它，再正常启动 */
   const onReclaim = async (): Promise<void> => {
     setKilling(true);
-    setActionError(null);
 
     try {
       await window.launcher.killPortOwner();
       setKillConfirm(false);
       await onStart();
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : String(error));
+      pushToast(
+        `结束占用进程失败：${error instanceof Error ? error.message : String(error)}`,
+        "error"
+      );
     } finally {
       setKilling(false);
     }
@@ -144,12 +147,14 @@ export default function Dashboard(): React.JSX.Element {
 
   const onStop = async (): Promise<void> => {
     setBusy(true);
-    setActionError(null);
 
     try {
       await stopService();
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : String(error));
+      pushToast(
+        `停止失败：${error instanceof Error ? error.message : String(error)}`,
+        "error"
+      );
     } finally {
       setBusy(false);
     }
@@ -242,13 +247,6 @@ export default function Dashboard(): React.JSX.Element {
       </Readouts>
 
       <Panel title="进程操作">
-        {actionError && (
-          <div style={{ marginBottom: "var(--sp-3)" }}>
-            <Notice tone="error" title="操作失败">
-              {actionError}
-            </Notice>
-          </div>
-        )}
         {/* 端口被占：说清是谁占着，并给出两个可点的动作（接管成功时不算冲突） */}
         {service?.portOwner && state === "error" && (
           <div style={{ marginBottom: "var(--sp-3)" }}>
@@ -284,15 +282,13 @@ export default function Dashboard(): React.JSX.Element {
           </div>
         )}
 
-        {service?.lastError &&
-          !actionError &&
-          (!service?.portOwner || state !== "error") && (
-            <div style={{ marginBottom: "var(--sp-3)" }}>
-              <Notice tone="error" title="服务异常">
-                {service.lastError}
-              </Notice>
-            </div>
-          )}
+        {service?.lastError && (!service?.portOwner || state !== "error") && (
+          <div style={{ marginBottom: "var(--sp-3)" }}>
+            <Notice tone="error" title="服务异常">
+              {service.lastError}
+            </Notice>
+          </div>
+        )}
 
         {service?.external && (
           <div style={{ marginBottom: "var(--sp-3)" }}>

@@ -433,6 +433,20 @@ export interface InstalledNode {
   error: string | null;
 }
 
+/**
+ * 启用 / 禁用的结果。
+ * 目录改名之外的状态（git、依赖、清单）都不会变，所以只回这一条，
+ * 让界面就地更新——重扫整张表要给每个插件 spawn 一堆 git，点一次卡几秒。
+ */
+export interface NodeToggleResult {
+  /** 改名后的物理目录名（禁用时带 .disabled 后缀） */
+  dirName: string;
+  /** 逻辑名：切换前后不变，也是列表行的稳定标识 */
+  baseName: string;
+  path: string;
+  enabled: boolean;
+}
+
 export interface RegistryNode {
   id: string;
   name: string;
@@ -552,7 +566,10 @@ export interface NodeBulkUpdateResult {
 
 /** 单个插件的远端更新检查结果（需要联网，按需触发） */
 export interface NodeUpdateInfo {
+  /** 检查时的物理目录名（禁用中的目录带 .disabled 后缀） */
   dirName: string;
+  /** 逻辑名：开关只改目录名，版本状态必须挂在稳定的这个名字上 */
+  baseName: string;
   hasUpdate: boolean;
   localCommit: string | null;
   remoteCommit: string | null;
@@ -752,7 +769,7 @@ export interface LauncherApi {
     dirName: string,
     enabled: boolean,
     root?: string
-  ): Promise<InstalledNode[]>;
+  ): Promise<NodeToggleResult>;
   updateNode(dirName: string, root?: string): Promise<OpResult<null>>;
   updateAllNodes(root?: string): Promise<OpResult<NodeBulkUpdateResult>>;
   uninstallNode(dirName: string, root?: string): Promise<OpResult<null>>;

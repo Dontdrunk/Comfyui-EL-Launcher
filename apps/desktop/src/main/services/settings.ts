@@ -16,9 +16,6 @@ import type {
  * 写入采用「临时文件 + 原子重命名」，避免断电/崩溃时留下半截 JSON 把配置写坏。
  */
 
-/** 首次启动的默认 ComfyUI 目录（用户已在需求中指明的固定路径） */
-const DEFAULT_COMFY_ROOT = "D:\\Projects\\Procedure\\ComfyUI-X";
-
 /** 监听地址：空值回落 127.0.0.1，顺手限长（只做形状校验，能不能绑上交给 ComfyUI 报错） */
 function normalizeListen(v: unknown): string {
   return typeof v === "string" && v.trim()
@@ -88,7 +85,8 @@ function defaultLaunch(): LaunchDefaults {
 
 function defaultSettings(): AppSettings {
   return {
-    comfyRoot: DEFAULT_COMFY_ROOT,
+    /* 全新安装不预设任何路径：各台机器的 ComfyUI 位置不同，先让用户去「设置」选 */
+    comfyRoot: "",
     theme: "dark",
     launch: defaultLaunch(),
     // 深拷贝内置预设，避免运行期修改污染模块常量

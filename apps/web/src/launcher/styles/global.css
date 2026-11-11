@@ -223,6 +223,38 @@ body {
   white-space: nowrap;
 }
 
+/*
+ * 插件名：点一下就打开它在 custom_nodes 下的实际目录。
+ * 平时按普通表格文字显示（蓝色链接会让整张表花掉），悬停才给下划线提示可点。
+ */
+.plugin-name {
+  appearance: none;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  /* crazy.css 给所有 button 写了 transition: all，行高也会被拿去过渡 */
+  transition: color var(--dur-fast);
+}
+
+.plugin-name:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.plugin-name--dim {
+  font-weight: 400;
+  color: var(--fg-muted);
+}
+
 /* 表头里的搜索框：压到和表头文字同一行高度 */
 .table__search {
   display: flex;
@@ -1206,8 +1238,8 @@ body {
   border: 1px solid var(--stroke);
   position: relative;
   transition:
-    background var(--dur),
-    border-color var(--dur);
+    background var(--dur) ease,
+    border-color var(--dur) ease;
   flex: 0 0 32px;
 }
 
@@ -1221,8 +1253,8 @@ body {
   border-radius: var(--r-sm);
   background: var(--fg-muted);
   transition:
-    transform var(--dur),
-    background var(--dur);
+    transform var(--dur) cubic-bezier(0.2, 0.9, 0.25, 1),
+    background var(--dur) ease;
 }
 
 .switch input:checked + .switch__track {
@@ -1707,6 +1739,25 @@ body {
   min-height: 100%;
   padding: var(--sp-8) var(--sp-4);
   text-align: center;
+}
+
+/* 未配置 ComfyUI 根目录时的整页空态：内容区正中一句说明 + 去设置 */
+.needsetup {
+  flex: 1 1 auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  padding: var(--sp-8) var(--sp-4);
+  text-align: center;
+}
+
+.needsetup__text {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--fg-muted);
 }
 
 /* 页面骨架已经立起来时，让转圈浮在整个内容区正中，位置不随骨架变化 */

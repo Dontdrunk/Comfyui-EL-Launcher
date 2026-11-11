@@ -1,4 +1,3 @@
-import { useNavigate } from "@tanstack/react-router";
 import { FolderOpen, Package, RefreshCw, Search } from "lucide";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -60,7 +59,6 @@ function lockTitle(busy: boolean): string | undefined {
 }
 
 export default function Packages(): React.JSX.Element {
-  const navigate = useNavigate();
   const settings = useApp((s) => s.settings);
   const env = useApp((s) => s.env);
   const jobs = useApp((s) => s.jobs);
@@ -75,7 +73,6 @@ export default function Packages(): React.JSX.Element {
   const [filter, setFilter] = useState("");
   const [spec, setSpec] = useState("");
   const [dragOver, setDragOver] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -141,8 +138,7 @@ export default function Packages(): React.JSX.Element {
       return;
     }
 
-    setError(message);
-    pushToast("操作失败", "error");
+    pushToast(`操作失败：${message}`, "error");
   };
 
   const runJob = async (
@@ -150,7 +146,6 @@ export default function Packages(): React.JSX.Element {
     onOk: (value: unknown) => void
   ): Promise<void> => {
     setPending(true);
-    setError(null);
     setActiveJobId(null);
 
     try {
@@ -243,7 +238,10 @@ export default function Packages(): React.JSX.Element {
       setBackups(list);
       setRestorePath(list[0]?.path ?? null);
     } catch (error_) {
-      setError(error_ instanceof Error ? error_.message : String(error_));
+      pushToast(
+        `读取环境备份失败：${error_ instanceof Error ? error_.message : String(error_)}`,
+        "error"
+      );
     } finally {
       setBackupsLoading(false);
     }
@@ -277,7 +275,6 @@ export default function Packages(): React.JSX.Element {
 
     if (picked) {
       setSpec(picked);
-      setError(null);
     }
   };
 
@@ -285,7 +282,10 @@ export default function Packages(): React.JSX.Element {
     try {
       await window.launcher.locatePipPackage(pkg.name, root);
     } catch (error_) {
-      setError(error_ instanceof Error ? error_.message : String(error_));
+      pushToast(
+        `打开包目录失败：${error_ instanceof Error ? error_.message : String(error_)}`,
+        "error"
+      );
     }
   };
 
@@ -298,7 +298,7 @@ export default function Packages(): React.JSX.Element {
     );
 
     if (!file) {
-      setError("请拖入 .whl 或 requirements.txt");
+      pushToast("请拖入 .whl 或 requirements.txt", "warn");
 
       return;
     }
@@ -310,9 +310,11 @@ export default function Packages(): React.JSX.Element {
         throw new Error("没有拿到文件路径");
       }
       setSpec(filePath);
-      setError(null);
     } catch (error_) {
-      setError(error_ instanceof Error ? error_.message : String(error_));
+      pushToast(
+        `读取拖入的文件失败：${error_ instanceof Error ? error_.message : String(error_)}`,
+        "error"
+      );
     }
   };
 
@@ -350,44 +352,9 @@ export default function Packages(): React.JSX.Element {
 
   return (
     <>
-      {!root && (
-        <Notice
-          tone="error"
-          title="未设置便携版根目录"
-          actions={
-            <button
-              type="button"
-              className="btn btn--sm"
-              onClick={() => void navigate({ to: "/settings" })}
-            >
-              去设置
-            </button>
-          }
-        >
-          请先指定 ComfyUI 便携版根目录。环境管理使用其中的
-          python_embeded\python.exe。
-        </Notice>
-      )}
-      {root && env && !env.pythonExe && (
-        <Notice
-          tone="error"
-          title="未找到内置 Python"
-          actions={
-            <button
-              type="button"
-              className="btn btn--sm"
-              onClick={() => void navigate({ to: "/settings" })}
-            >
-              去设置
-            </button>
-          }
-        >
-          缺少 {root}\python_embeded\python.exe。请改到官方便携版的根目录。
-        </Notice>
-      )}
-      {(error || listError) && (
-        <Notice tone="error" title={error ? "操作失败" : "读取失败"}>
-          {error || listError}
+      {listError && (
+        <Notice tone="error" title="读取失败">
+          {listError}
         </Notice>
       )}
 

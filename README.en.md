@@ -195,20 +195,20 @@ It also creates a `JobSnapshot` (`status`, `percent`, `lines`) in the job center
 
 ### Settings fields (config.json)
 
-| Field                    | Type                | Default                           | Notes                                               |
-| ------------------------ | ------------------- | --------------------------------- | --------------------------------------------------- |
-| `comfyRoot`              | string              | `D:\Projects\Procedure\ComfyUI-X` | Portable build root                                 |
-| `theme`                  | `"dark" \| "light"` | `dark`                            | Theme, toggled in the title bar                     |
-| `launch.mode`            | `"gpu" \| "cpu"`    | `gpu`                             | Launch mode; `cpu` appends `--cpu`                  |
-| `launch.port`            | number              | `8188`                            | `--port`                                            |
-| `launch.remote`          | boolean             | `false`                           | When enabled, appends `--listen <listen>`           |
-| `launch.listen`          | string              | `127.0.0.1`                       | Remote listen address; empty means `0.0.0.0`        |
-| `launch.autoOpenBrowser` | boolean             | `true`                            | When disabled, appends `--disable-auto-launch`      |
-| `launch.fastFp16`        | boolean             | `false`                           | Appends `--fast fp16_accumulation`                  |
-| `launch.disableApiNodes` | boolean             | `false`                           | Appends `--disable-api-nodes`                       |
-| `launch.extraArgs`       | string              | `""`                              | Extra arguments, tokenized with quote support       |
-| `presets`                | `LaunchPreset[]`    | five built-ins                    | Launch presets; `builtin` entries cannot be removed |
-| `activePresetId`         | string \| null      | `standard`                        | Active preset; `null` means custom                  |
+| Field                    | Type                | Default        | Notes                                               |
+| ------------------------ | ------------------- | -------------- | --------------------------------------------------- |
+| `comfyRoot`              | string              | `""` (unset)   | Portable build root; unset opens the setup guide    |
+| `theme`                  | `"dark" \| "light"` | `dark`         | Theme, toggled in the title bar                     |
+| `launch.mode`            | `"gpu" \| "cpu"`    | `gpu`          | Launch mode; `cpu` appends `--cpu`                  |
+| `launch.port`            | number              | `8188`         | `--port`                                            |
+| `launch.remote`          | boolean             | `false`        | When enabled, appends `--listen <listen>`           |
+| `launch.listen`          | string              | `127.0.0.1`    | Remote listen address; empty means `0.0.0.0`        |
+| `launch.autoOpenBrowser` | boolean             | `true`         | When disabled, appends `--disable-auto-launch`      |
+| `launch.fastFp16`        | boolean             | `false`        | Appends `--fast fp16_accumulation`                  |
+| `launch.disableApiNodes` | boolean             | `false`        | Appends `--disable-api-nodes`                       |
+| `launch.extraArgs`       | string              | `""`           | Extra arguments, tokenized with quote support       |
+| `presets`                | `LaunchPreset[]`    | five built-ins | Launch presets; `builtin` entries cannot be removed |
+| `activePresetId`         | string \| null      | `standard`     | Active preset; `null` means custom                  |
 
 ## Development
 

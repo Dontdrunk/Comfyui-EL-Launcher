@@ -195,20 +195,20 @@ type OpResult<T> =
 
 ### 设置字段（config.json）
 
-| 字段                     | 类型                | 默认值                            | 说明                               |
-| ------------------------ | ------------------- | --------------------------------- | ---------------------------------- |
-| `comfyRoot`              | string              | `D:\Projects\Procedure\ComfyUI-X` | 便携版根目录                       |
-| `theme`                  | `"dark" \| "light"` | `dark`                            | 主题，标题栏切换                   |
-| `launch.mode`            | `"gpu" \| "cpu"`    | `gpu`                             | 启动模式；`cpu` 追加 `--cpu`       |
-| `launch.port`            | number              | `8188`                            | `--port`                           |
-| `launch.remote`          | boolean             | `false`                           | 开启后追加 `--listen <listen>`     |
-| `launch.listen`          | string              | `127.0.0.1`                       | 远程访问监听地址，留空按 `0.0.0.0` |
-| `launch.autoOpenBrowser` | boolean             | `true`                            | 关闭时追加 `--disable-auto-launch` |
-| `launch.fastFp16`        | boolean             | `false`                           | 追加 `--fast fp16_accumulation`    |
-| `launch.disableApiNodes` | boolean             | `false`                           | 追加 `--disable-api-nodes`         |
-| `launch.extraArgs`       | string              | `""`                              | 附加参数，按引号规则分词           |
-| `presets`                | `LaunchPreset[]`    | 5 套内置                          | 启动参数预设，`builtin` 不可删除   |
-| `activePresetId`         | string \| null      | `standard`                        | 当前预设；`null` 表示自定义        |
+| 字段                     | 类型                | 默认值         | 说明                                       |
+| ------------------------ | ------------------- | -------------- | ------------------------------------------ |
+| `comfyRoot`              | string              | `""`（未配置） | 便携版根目录，未配置时所有页面先走配置引导 |
+| `theme`                  | `"dark" \| "light"` | `dark`         | 主题，标题栏切换                           |
+| `launch.mode`            | `"gpu" \| "cpu"`    | `gpu`          | 启动模式；`cpu` 追加 `--cpu`               |
+| `launch.port`            | number              | `8188`         | `--port`                                   |
+| `launch.remote`          | boolean             | `false`        | 开启后追加 `--listen <listen>`             |
+| `launch.listen`          | string              | `127.0.0.1`    | 远程访问监听地址，留空按 `0.0.0.0`         |
+| `launch.autoOpenBrowser` | boolean             | `true`         | 关闭时追加 `--disable-auto-launch`         |
+| `launch.fastFp16`        | boolean             | `false`        | 追加 `--fast fp16_accumulation`            |
+| `launch.disableApiNodes` | boolean             | `false`        | 追加 `--disable-api-nodes`                 |
+| `launch.extraArgs`       | string              | `""`           | 附加参数，按引号规则分词                   |
+| `presets`                | `LaunchPreset[]`    | 5 套内置       | 启动参数预设，`builtin` 不可删除           |
+| `activePresetId`         | string \| null      | `standard`     | 当前预设；`null` 表示自定义                |
 
 ## 开发
 

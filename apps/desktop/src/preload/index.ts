@@ -22,6 +22,7 @@ import type {
   NodeDepsDetail,
   NodeDepsReport,
   NodeReleases,
+  NodeToggleResult,
   NodeUpdateInfo,
   OpResult,
   PipPackage,
@@ -190,9 +191,12 @@ const api: LauncherApi = {
       OpResult<InstallResult>
     >,
   setNodeEnabled: async (dirName, enabled, root) =>
-    ipcRenderer.invoke(IPC.nodesSetEnabled, dirName, enabled, root) as Promise<
-      InstalledNode[]
-    >,
+    ipcRenderer.invoke(
+      IPC.nodesSetEnabled,
+      dirName,
+      enabled,
+      root
+    ) as Promise<NodeToggleResult>,
   updateNode: async (dirName, root) =>
     ipcRenderer.invoke(IPC.nodesUpdate, dirName, root) as Promise<
       OpResult<null>

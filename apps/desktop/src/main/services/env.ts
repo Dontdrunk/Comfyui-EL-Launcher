@@ -49,19 +49,26 @@ export async function readAppVersion(
 }
 
 export async function checkLayout(root: string): Promise<EnvLayout> {
-  const paths = resolveComfyPaths(root);
+  const rootPath = root.trim();
+
+  /* 没选目录不等于「目录不存在」：那是未配置，界面会提示该选什么样的目录 */
+  if (!rootPath) {
+    return emptyLayout(rootPath, []);
+  }
+
+  const paths = resolveComfyPaths(rootPath);
   const issues: EnvIssue[] = [];
 
-  const rootOk = await exists(root);
+  const rootOk = await exists(rootPath);
 
   if (!rootOk) {
     issues.push({
       level: "error",
-      message: `目录不存在：${root}`,
-      hint: "请在「设置」中填写 ComfyUI 便携版的根目录（含 python_embeded 与 ComfyUI 两层）。",
+      message: `目录不存在：${rootPath}`,
+      hint: "选择的目录需要包含 python_embeded 与 ComfyUI 两个子目录（即 ComfyUI 官方便携版的根目录）。",
     });
 
-    return emptyLayout(root, issues);
+    return emptyLayout(rootPath, issues);
   }
 
   const [pythonOk, mainOk, updateOk, customNodesOk, modelsOk, gitOk, reqOk] =
@@ -79,7 +86,7 @@ export async function checkLayout(root: string): Promise<EnvLayout> {
     issues.push({
       level: "error",
       message: `缺少内置解释器：${paths.pythonExe}`,
-      hint: "本启动器面向 ComfyUI 官方便携版（portable），需要 python_embeded 目录。",
+      hint: "选择的目录需要包含 python_embeded 子目录（里面有 python.exe），并与 ComfyUI 子目录并列。",
     });
   }
 
@@ -87,7 +94,7 @@ export async function checkLayout(root: string): Promise<EnvLayout> {
     issues.push({
       level: "error",
       message: `缺少 ComfyUI 入口：${paths.mainPy}`,
-      hint: "确认根目录下存在 ComfyUI\\main.py。",
+      hint: "选择的目录需要包含 ComfyUI 子目录，且其中有 main.py。",
     });
   }
 

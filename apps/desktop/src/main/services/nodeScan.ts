@@ -12,7 +12,7 @@ import { gitSoft } from "./git";
  * ══════════════════════════════════════════════════════════ */
 
 /** ComfyUI 原生禁用机制：目录名以 .disabled 结尾 */
-export const DISABLED_SUFFIX = ".disabled";
+const DISABLED_SUFFIX = ".disabled";
 
 export interface NodeDirEntry {
   /** 目录实际名（可能带 .disabled 后缀） */
@@ -77,6 +77,22 @@ export async function listNodeDirs(
   }
 
   return out.sort((a, b) => a.baseName.localeCompare(b.baseName));
+}
+
+/**
+ * 插件在「启用 / 禁用」之后的目录路径。
+ * ComfyUI 用目录名后缀表达禁用，所以启用要去掉后缀、禁用要加后缀。
+ * 不能拿当前目录路径直接当目标：禁用中的目录自带 .disabled，启用时会原地撞上它自己。
+ */
+export function nodeDirForEnabled(
+  customNodesDir: string,
+  baseName: string,
+  enabled: boolean
+): string {
+  return join(
+    customNodesDir,
+    enabled ? baseName : `${baseName}${DISABLED_SUFFIX}`
+  );
 }
 
 /** 读取插件目录的 git 信息（非 git 目录返回 isGit:false） */

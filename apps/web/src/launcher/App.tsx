@@ -1,7 +1,9 @@
+import { useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import type { ReactNode } from "react";
 
 import { Logo } from "./components/Brand";
+import { NeedSetup } from "./components/NeedSetup";
 import { Sidebar } from "./components/Sidebar";
 import { StatusRail } from "./components/StatusRail";
 import { TitleBar } from "./components/TitleBar";
@@ -56,6 +58,11 @@ export default function App({
 }): React.JSX.Element {
   const booted = useApp((s) => s.booted);
   const bootError = useApp((s) => s.bootError);
+  const settings = useApp((s) => s.settings);
+  const env = useApp((s) => s.env);
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
 
   useEffect(() => {
     void useApp.getState().boot();
@@ -64,6 +71,16 @@ export default function App({
   if (!booted) {
     return <Splash />;
   }
+
+  /*
+   * 没有可用的便携版根目录时所有页面共用一屏引导：
+   * 目录为空，或者目录结构校验没过（不存在、缺 python_embeded / ComfyUI\main.py）。
+   * 设置页除外——那里正是填目录的地方，挡住它就没法配置了。
+   */
+  const needsSetup =
+    bootError === null &&
+    settings !== null &&
+    ((settings.comfyRoot ?? "").trim() === "" || (env !== null && !env.valid));
 
   return (
     <div className="app">
@@ -79,7 +96,11 @@ export default function App({
                 </Notice>
               </div>
             )}
-            {children}
+            {needsSetup && !pathname.startsWith("/settings") ? (
+              <NeedSetup />
+            ) : (
+              children
+            )}
           </div>
         </main>
       </div>

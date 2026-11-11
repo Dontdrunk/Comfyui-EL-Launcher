@@ -8,6 +8,7 @@ import type {
   NodeBulkUpdateResult,
   NodeDepsReport,
   NodeReleases,
+  NodeToggleResult,
   NodeUpdateInfo,
   OpResult,
   RegistrySearchResult,
@@ -92,7 +93,7 @@ export function registerNodesIpc(): void {
       dirName: string,
       enabled: boolean,
       root?: string
-    ): Promise<InstalledNode[]> => {
+    ): Promise<NodeToggleResult> => {
       assertSafeDirName(dirName);
 
       return await setNodeEnabled(pickRoot(root), dirName, Boolean(enabled));

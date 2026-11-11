@@ -50,6 +50,9 @@ export default function Settings(): React.JSX.Element {
     return <Spinner label="读取配置…" />;
   }
 
+  /** 没选根目录时读数列说「未配置」，不要说成「无效 / 缺少 .git」 */
+  const configured = settings.comfyRoot.trim().length > 0;
+
   const patch = (p: Partial<AppSettings>): void => void patchSettings(p);
 
   const patchLaunch = (p: Partial<AppSettings["launch"]>): void => {
@@ -126,7 +129,7 @@ export default function Settings(): React.JSX.Element {
                   setRoot(e.target.value);
                 }}
                 onBlur={() => void commitRoot()}
-                placeholder="D:\Projects\Procedure\ComfyUI-X"
+                placeholder="点「浏览」选择 ComfyUI 便携版根目录"
               />
               <button
                 type="button"
@@ -137,6 +140,9 @@ export default function Settings(): React.JSX.Element {
                 浏览
               </button>
             </div>
+            <span className="field__hint">
+              选择的目录需要包含 python_embeded 与 ComfyUI 两个子目录。
+            </span>
           </div>
 
           {/* 启动模式跟着环境走：有没有显卡、要不要退到 CPU，就是这个目录决定的事 */}
@@ -158,15 +164,27 @@ export default function Settings(): React.JSX.Element {
         <Readouts cols={4}>
           <Readout
             label="目录状态"
-            value={env?.valid ? "有效" : "无效"}
-            tone={env?.valid ? "ok" : "error"}
-            hint={env?.portable ? "识别为便携版" : "未识别为便携版"}
+            value={configured ? (env?.valid ? "有效" : "无效") : "未配置"}
+            tone={configured ? (env?.valid ? "ok" : "error") : "none"}
+            hint={
+              configured
+                ? env?.portable
+                  ? "识别为便携版"
+                  : "未识别为便携版"
+                : "请选择便携版根目录"
+            }
           />
           <Readout
             label="ComfyUI 版本"
             value={env?.appVersion ?? "—"}
-            hint={env?.isGitRepo ? "git 仓库可用" : "缺少 .git"}
-            tone={env?.isGitRepo ? "ok" : "warn"}
+            hint={
+              configured
+                ? env?.isGitRepo
+                  ? "git 仓库可用"
+                  : "缺少 .git"
+                : "未配置"
+            }
+            tone={configured ? (env?.isGitRepo ? "ok" : "warn") : "none"}
           />
           <Readout
             label="Python"

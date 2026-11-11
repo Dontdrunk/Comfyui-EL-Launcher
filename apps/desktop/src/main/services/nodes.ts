@@ -12,6 +12,7 @@ import type {
   NodeBulkUpdateResult,
   NodeDepsReport,
   NodeReleases,
+  NodeToggleResult,
   NodeUpdateFailure,
   NodeUpdateInfo,
 } from "@explorer-launcher/electron";
@@ -22,8 +23,8 @@ import { resolveComfyPaths } from "../lib/paths";
 import { pipInstall, pipInstallPackages } from "../lib/pip";
 import { git, gitRaw, gitSoft } from "./git";
 import {
-  DISABLED_SUFFIX,
   listNodeDirs,
+  nodeDirForEnabled,
   pathExists,
   readNodeGitInfo,
   readNodeManifest,
@@ -142,11 +143,18 @@ export async function checkNodeUpdates(
   const tasks = dirs.map(async (d): Promise<NodeUpdateInfo> => {
     const blank: NodeUpdateInfo = {
       dirName: d.dirName,
+      baseName: d.baseName,
       hasUpdate: false,
       localCommit: null,
       remoteCommit: null,
       error: null,
     };
+
+    /* 非 git 目录不可能有远端更新。不先判 .git 的话会为每个目录 spawn 一次 git，
+       而 git 把该目录当工作目录；用户此时点开关，Windows 会拒绝重命名（EBUSY）。 */
+    if (!(await pathExists(join(d.path, ".git")))) {
+      return blank;
+    }
 
     const remote = await gitSoft(d.path, ["remote", "get-url", "origin"]);
 
@@ -179,6 +187,7 @@ export async function checkNodeUpdates(
 
     return {
       dirName: d.dirName,
+      baseName: d.baseName,
       hasUpdate: !sameCommit(local, remoteCommit),
       localCommit: local,
       remoteCommit,
@@ -191,11 +200,45 @@ export async function checkNodeUpdates(
 
 /* ── 启用 / 禁用 ── */
 
+/** 从 unknown 里安全取 errno code（不做无校验的类型断言） */
+function errnoCode(error: unknown): string | null {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return null;
+  }
+  const { code } = error as { code?: unknown };
+
+  return typeof code === "string" ? code : null;
+}
+
+/* Windows 上目录正被别的进程当工作目录时 rename 会 EBUSY/EPERM；
+   等占用方退出再试，别把第一次失败直接抛给用户。 */
+const RENAME_RETRY_DELAYS_MS = [80, 160, 320, 640];
+
+async function renameWithRetry(from: string, to: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(from, to);
+
+      return;
+    } catch (error) {
+      const code = errnoCode(error);
+      const transient = code === "EBUSY" || code === "EPERM";
+
+      if (!transient || attempt >= RENAME_RETRY_DELAYS_MS.length) {
+        throw error;
+      }
+      await new Promise((resolve) => {
+        setTimeout(resolve, RENAME_RETRY_DELAYS_MS[attempt]);
+      });
+    }
+  }
+}
+
 export async function setNodeEnabled(
   root: string,
   dirName: string,
   enabled: boolean
-): Promise<InstalledNode[]> {
+): Promise<NodeToggleResult> {
   requireStopped("修改插件启用状态");
   const paths = resolveComfyPaths(root);
 
@@ -206,18 +249,32 @@ export async function setNodeEnabled(
     throw new Error(`找不到插件目录：${dirName}`);
   }
   if (entry.enabled === enabled) {
-    return await listInstalledNodes(root);
+    return {
+      dirName: entry.dirName,
+      baseName: entry.baseName,
+      path: entry.path,
+      enabled,
+    };
   }
 
-  const target = enabled ? entry.path : `${entry.path}${DISABLED_SUFFIX}`;
+  const target = nodeDirForEnabled(
+    paths.customNodesDir,
+    entry.baseName,
+    enabled
+  );
 
   if (await pathExists(target)) {
     throw new Error(`目标路径已存在：${target}`);
   }
 
-  await rename(entry.path, target);
+  await renameWithRetry(entry.path, target);
 
-  return await listInstalledNodes(root);
+  return {
+    dirName: basename(target),
+    baseName: entry.baseName,
+    path: target,
+    enabled,
+  };
 }
 
 /* ── 卸载（移入回收站，不做永久删除） ── */
