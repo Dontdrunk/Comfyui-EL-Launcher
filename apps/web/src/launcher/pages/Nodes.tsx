@@ -122,10 +122,6 @@ export default function Nodes(): React.JSX.Element {
   /** 正在改启用状态的行：只锁这一行，连点不会发两次 */
   const [togglingDir, setTogglingDir] = useState<string | null>(null);
 
-  const [uninstallTarget, setUninstallTarget] = useState<InstalledNode | null>(
-    null
-  );
-
   /* 版本切换面板 */
   const [verTarget, setVerTarget] = useState<InstalledNode | null>(null);
   const [releases, setReleases] = useState<NodeReleases | null>(null);
@@ -601,17 +597,14 @@ export default function Nodes(): React.JSX.Element {
     );
   };
 
-  const doUninstall = async (): Promise<void> => {
-    const node = uninstallTarget;
-
-    if (!node || !root) {
+  const doUninstall = async (node: InstalledNode): Promise<void> => {
+    if (!root) {
       return;
     }
-    setUninstallTarget(null);
     const res = await window.launcher.uninstallNode(node.dirName, root);
 
     if (res.ok) {
-      pushToast(`插件 ${node.baseName} 已卸载`);
+      pushToast(`已卸载插件 ${node.baseName}`);
     } else {
       pushToast(`卸载 ${node.baseName} 失败：${res.error}`, "error");
     }
@@ -779,6 +772,14 @@ export default function Nodes(): React.JSX.Element {
               <Icon icon={Download} size={13} />
               重装所有插件依赖
             </button>
+            <button
+              type="button"
+              className="btn btn--sm"
+              disabled={updateCount === 0}
+              onClick={() => guard.proceed("更新插件", doUpdateAll)}
+            >
+              一键更新{updateCount > 0 ? ` (${updateCount})` : ""}
+            </button>
           </>
         }
       >
@@ -843,21 +844,7 @@ export default function Nodes(): React.JSX.Element {
                     <th>来源</th>
                     <th style={{ width: 100 }}>版本ID</th>
                     <th style={{ width: 170 }}>更新时间</th>
-                    <th style={{ width: 220 }}>
-                      <div
-                        className="row"
-                        style={{ gap: 6, justifyContent: "flex-end" }}
-                      >
-                        <button
-                          type="button"
-                          className="btn btn--sm"
-                          disabled={updateCount === 0}
-                          onClick={() => guard.proceed("更新插件", doUpdateAll)}
-                        >
-                          一键更新{updateCount > 0 ? ` (${updateCount})` : ""}
-                        </button>
-                      </div>
-                    </th>
+                    <th style={{ width: 150 }}>操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -929,7 +916,10 @@ export default function Nodes(): React.JSX.Element {
                         <td className="mono">{n.shortCommit ?? "—"}</td>
                         <td
                           className="dim"
-                          style={{ fontSize: "var(--fs-xs)" }}
+                          style={{
+                            fontSize: "var(--fs-xs)",
+                            whiteSpace: "nowrap",
+                          }}
                         >
                           {n.commitDate ? formatDateTime(n.commitDate) : "—"}
                         </td>
@@ -957,9 +947,11 @@ export default function Nodes(): React.JSX.Element {
                             <button
                               type="button"
                               className="rowlink rowlink--danger"
-                              onClick={() => {
-                                setUninstallTarget(n);
-                              }}
+                              onClick={() =>
+                                guard.proceed("卸载插件", async () =>
+                                  doUninstall(n)
+                                )
+                              }
                             >
                               卸载
                             </button>
@@ -1147,57 +1139,6 @@ export default function Nodes(): React.JSX.Element {
           </div>
         )}
       </Panel>
-
-      {/* ══════════ 卸载确认 ══════════ */}
-      {uninstallTarget && (
-        <Modal
-          title="卸载插件"
-          subtitle={uninstallTarget.baseName}
-          onClose={() => {
-            setUninstallTarget(null);
-          }}
-          width={620}
-          footer={
-            <>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  setUninstallTarget(null);
-                }}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="btn btn--danger"
-                onClick={() => guard.proceed("卸载插件", doUninstall)}
-              >
-                移入回收站
-              </button>
-            </>
-          }
-        >
-          <Notice tone="warn" title="将删除插件目录（可从回收站恢复）">
-            插件目录会被移入系统回收站，不会永久删除。
-          </Notice>
-          <div className="kv" style={{ marginTop: "var(--sp-3)" }}>
-            <span className="kv__k">目录</span>
-            <span className="kv__v">{uninstallTarget.path}</span>
-            <span className="kv__k">来源</span>
-            <span className="kv__v">
-              {uninstallTarget.remote ?? "手动安装（本地目录）"}
-            </span>
-          </div>
-          <div style={{ marginTop: "var(--sp-3)" }}>
-            <Notice tone="info" title="依赖不会被删除">
-              该插件安装过的 Python 包会保留在 python_embeded
-              中。这是刻意设计：这些包很可能同时被其他插件或 ComfyUI
-              本体使用，自动删除会导致其他功能损坏。
-            </Notice>
-          </div>
-        </Modal>
-      )}
 
       {/* ══════════ 版本切换 ══════════ */}
       {verTarget && (
@@ -1447,6 +1388,7 @@ function SourceCell({ remote }: { remote: string | null }): React.JSX.Element {
     return (
       <span
         className="mono dim"
+        style={REMOTE_CELL_STYLE}
         title="本地目录：没有关联远端仓库，不参与版本比对"
       >
         {LOCAL_PLUGIN_LABEL}

@@ -303,7 +303,13 @@ test("an uninstall that empties the plugin filter keeps the search box reachable
     await expect(rows).toHaveCount(1);
 
     await page.getByRole("button", { name: "卸载" }).click();
-    await page.getByRole("button", { name: "移入回收站" }).click();
+
+    // 卸载不再弹确认框：点下即删，结果只走顶部轻提示
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByText("已卸载插件 PluginAlpha")).toBeVisible();
+    await expect
+      .poll(async () => await readdir(customNodes))
+      .toEqual(["PluginBeta", "PluginGamma"]);
 
     // 卸载刷新后筛选条件仍指向刚删掉的插件：搜索框必须还在，否则筛选永远清不掉
     await expect(page.getByText("没有匹配的插件")).toBeVisible();
@@ -415,6 +421,41 @@ test("toggling a plugin keeps its update status", async () => {
           await readdir(path.join(comfyRoot, "ComfyUI", "custom_nodes"))
       )
       .toEqual(["PluginGit.disabled"]);
+
+    // 窗口缩到最小宽度：更新时间与行动作都必须各自保持一行，不能被挤成两行
+    await launched.application.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(950, 720);
+    });
+    await expect
+      .poll(
+        async () =>
+          await page.evaluate(() => {
+            const tr = document.querySelector("tbody tr");
+
+            if (!tr) {
+              return null;
+            }
+
+            const date = tr.children.item(5);
+
+            if (!(date instanceof HTMLElement)) {
+              return null;
+            }
+
+            const actions = [
+              ...tr.querySelectorAll(".table__actions > *"),
+            ].flatMap((el) =>
+              el instanceof HTMLElement ? [el.offsetTop] : []
+            );
+
+            return {
+              dateClipped: date.scrollWidth > date.clientWidth,
+              actionLines: new Set(actions).size,
+              rowOneLine: tr.getBoundingClientRect().height < 60,
+            };
+          })
+      )
+      .toEqual({ dateClipped: false, actionLines: 1, rowOneLine: true });
   } finally {
     await close(launched);
     await rm(comfyRoot, { force: true, recursive: true });

@@ -2,8 +2,6 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
-import { shell } from "electron";
-
 import type {
   InstallResult,
   InstalledNode,
@@ -282,7 +280,7 @@ export async function setNodeEnabled(
   };
 }
 
-/* ── 卸载（移入回收站，不做永久删除） ── */
+/* ── 卸载（永久删除插件目录，依赖保留） ── */
 
 export async function uninstallNode(
   root: string,
@@ -298,14 +296,19 @@ export async function uninstallNode(
   }
 
   const info = await readNodeGitInfo(full);
-  onLine?.("system", `[插件] 正在卸载 ${dirName}（移入回收站，可恢复）`);
+  onLine?.("system", `[插件] 正在卸载 ${dirName}（永久删除插件目录）`);
 
   if (info.remote) {
     onLine?.("system", `[插件] 来源仓库：${info.remote}`);
   }
 
-  await shell.trashItem(full);
-  onLine?.("system", `[插件] 已移入回收站：${dirName}`);
+  await rm(full, {
+    recursive: true,
+    force: true,
+    maxRetries: 3,
+    retryDelay: 100,
+  });
+  onLine?.("system", `[插件] 已删除：${dirName}`);
   onLine?.(
     "system",
     "[插件] 注意：该插件安装过的 Python 依赖不会被自动删除（可能与其他插件共用）。"
