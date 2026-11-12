@@ -2,6 +2,8 @@
 #
 # 自更新（apps/desktop/src/main/services/selfUpdate.ts）只认这个 Release 里的
 # latest.yml 与两个 exe，所以不要改成 draft、不要漏传 latest.yml。
+# Release 正文取仓库里的 .github/release-notes.md：应用内「更新说明」渲染的就是它，
+# 每次发版先把这个文件改成当前版本的说明。
 # 发布失败时在 Actions 页面点「Re-run failed jobs」即可，不需要重新打标签。
 name: release
 
@@ -53,7 +55,7 @@ jobs:
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body_path: .github/release-notes.md
           fail_on_unmatched_files: true
           files: |
             apps/desktop/release/ExplorerLauncher-*-setup.exe

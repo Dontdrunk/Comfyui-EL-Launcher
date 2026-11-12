@@ -243,6 +243,13 @@ vp run dev
 
 ## 发布
 
+推送 `v*` 标签会触发 `.github/workflows/release.yml`：在 Windows 上校验标签与版本、跑检查与单测，构建安装版与便携版并发布到 GitHub Release。
+
+- Release 正文取自仓库里的 `.github/release-notes.md`，应用内「更新说明」直接渲染它；发版前把这份文件改成当前版本的说明。
+- 标签与 `package.json` 版本必须一致，否则工作流直接失败。
+
+本地打包：
+
 ```sh
 vp run package:desktop
 ```
