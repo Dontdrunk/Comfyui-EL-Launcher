@@ -1,11 +1,13 @@
 import { writeFile } from "node:fs/promises";
+import path from "node:path";
 
-import { BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, screen, shell } from "electron";
 
 import { resolveAppIcon } from "./lib/icon";
 import { applyTitleBarTheme } from "./lib/titlebar";
 import { isExternalUrl, isTrustedUrl } from "./renderer-route";
 import { settingsStore } from "./services/settings";
+import { createWindowSizeStore, MIN_WINDOW_SIZE } from "./window-size";
 
 /**
  * 创建主窗口。
@@ -24,13 +26,20 @@ export function createMainWindow({
 }): BrowserWindow {
   const { theme } = settingsStore.get();
 
+  // 每次启动都开成同一个尺寸：读上次退出时的长宽，没有记录才用默认值
+  const windowSizeStore = createWindowSizeStore(
+    path.join(app.getPath("userData"), "window-state.json"),
+    screen.getPrimaryDisplay().workAreaSize
+  );
+  const { height, width } = windowSizeStore.read();
+
   const win = new BrowserWindow({
-    width: 1200,
-    height: 780,
-    minWidth: 950,
+    width,
+    height,
+    minWidth: MIN_WINDOW_SIZE.width,
     // 侧栏 7 项（65px + 10px 间距）+ 顶栏 60 + 状态条 26，再留一条缝。
     // 再矮就会让侧栏压到状态条上。
-    minHeight: 720,
+    minHeight: MIN_WINDOW_SIZE.height,
     show: false,
     backgroundColor: theme === "dark" ? "#171718" : "#ffffff",
     autoHideMenuBar: true,
@@ -46,6 +55,8 @@ export function createMainWindow({
       spellcheck: false,
     },
   });
+
+  windowSizeStore.track(win);
 
   win.once("ready-to-show", () => {
     win.show();
