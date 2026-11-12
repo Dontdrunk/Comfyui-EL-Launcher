@@ -1,6 +1,6 @@
 {
   "name": "@explorer-launcher/web",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "imports": {
@@ -20,6 +20,8 @@
     "morphicons": "^1.7.1",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-markdown": "catalog:",
+    "remark-gfm": "catalog:",
     "sonner": "catalog:",
     "zustand": "^5.0.15"
   },
