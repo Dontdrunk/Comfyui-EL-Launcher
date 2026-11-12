@@ -668,17 +668,52 @@ export interface GitAvailability {
 
 export type Unsubscribe = () => void;
 
+/**
+ * 自更新阶段：
+ *  - idle        未开始 / 用户取消（主进程已中止下载）
+ *  - checking    正在检查 Release
+ *  - downloading 正在下载安装包
+ *  - verifying   下载完，正在校验 sha512
+ *  - installing  校验通过，正在启动安装程序或替换便携版（随后进程退出）
+ *  - error       失败，原因在 message 里
+ */
+export type SelfUpdateStage =
+  | "idle"
+  | "checking"
+  | "downloading"
+  | "verifying"
+  | "installing"
+  | "error";
+
 export interface SelfUpdateStatus {
   /** latest：已是最新。available：可点更新。error：检查或发布不可用 */
   state: "latest" | "available" | "error";
+  /** 当前安装的版本，弹窗里显示在箭头左侧 */
+  currentVersion: string;
   version: string | null;
   message: string | null;
-  /** 开发模式为 false，点击只提示，不替换当前进程 */
+  /** 开发模式为 false：不替换当前进程，弹窗里给出说明 */
   packaged: boolean;
+  /** 便携版换的是 portable.exe，安装版跑的是 setup.exe */
+  portable: boolean;
+  /** GitHub Release 的更新说明（Markdown 原文） */
+  notes: string | null;
+  publishedAt: string | null;
+  releaseUrl: string | null;
+  /** 将要下载的安装包大小（字节）；发布里没有对应包时为 null */
+  size: number | null;
 }
 
 export interface SelfUpdateProgress {
-  percent: number;
+  stage: SelfUpdateStage;
+  /** 下载百分比；非下载阶段为 null */
+  percent: number | null;
+  receivedBytes: number;
+  totalBytes: number | null;
+  /** 下载速度（字节/秒）；采样不足时为 null */
+  bytesPerSecond: number | null;
+  /** 阶段说明或错误原因 */
+  message: string | null;
 }
 
 export interface LauncherApi {
@@ -848,5 +883,11 @@ export interface LauncherApi {
   /* ---- 启动器自身更新 ---- */
   selfUpdateStatus(): Promise<SelfUpdateStatus>;
   selfUpdateInstall(): Promise<void>;
+  /** 中止下载并清掉临时文件；安装阶段不可取消 */
+  selfUpdateCancel(): Promise<void>;
+  /** 进度窗口挂载完成（只用于更新进度窗口内部） */
+  selfUpdateUiReady(): void;
+  /** 关闭进度窗口并恢复主窗口（失败后的出口） */
+  selfUpdateDismiss(): Promise<void>;
   onSelfUpdate(cb: (progress: SelfUpdateProgress) => void): Unsubscribe;
 }

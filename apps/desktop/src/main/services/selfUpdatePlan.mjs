@@ -96,3 +96,45 @@ export function isLauncherAsset(name) {
 export function sha512Base64(data) {
   return createHash("sha512").update(data).digest("base64");
 }
+/**
+ * 下载速度计量：只保留最近 windowMs 的采样，算的是「当下」的速率，
+ * 不会被开头几十秒的慢连接拖低，暂停后旧采样也会自然过期。
+ */
+export function createSpeedMeter(windowMs = 1000) {
+  /** @type {{ bytes: number, at: number }[]} */
+  let samples = [];
+
+  return {
+    /**
+     * @param {number} bytes 累计已下载字节
+     * @param {number} at 采样时刻（毫秒）
+     */
+    sample(bytes, at) {
+      samples.push({ bytes, at });
+      const cutoff = at - windowMs;
+
+      samples = samples.filter((s) => s.at >= cutoff);
+      if (samples.length > 32) {
+        samples = samples.slice(-32);
+      }
+    },
+
+    /**
+     * @returns {number | null} 字节/秒；不足两个有效采样时返回 null
+     */
+    rate() {
+      const first = samples[0];
+      const last = samples.at(-1);
+
+      if (!first || !last || samples.length < 2) {
+        return null;
+      }
+      const elapsed = last.at - first.at;
+
+      if (elapsed <= 0) {
+        return null;
+      }
+      return Math.max(0, ((last.bytes - first.bytes) / elapsed) * 1000);
+    },
+  };
+}

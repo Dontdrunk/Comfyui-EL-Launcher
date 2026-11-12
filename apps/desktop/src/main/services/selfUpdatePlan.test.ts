@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 
 import {
+  createSpeedMeter,
   isNewer,
   parseLatestYml,
   pickFile,
@@ -42,6 +43,31 @@ sha512: abcdef==
       pickFile(parsed.files, true)?.url,
       "ExplorerLauncher-0.2.0-portable.exe"
     );
+  });
+
+  it("下载速度按最近一秒的采样算", () => {
+    const meter = createSpeedMeter(1000);
+
+    // 只有一个采样：还算不出速度
+    meter.sample(0, 0);
+    assert.equal(meter.rate(), null);
+
+    meter.sample(1024 * 1024, 1000);
+    assert.equal(meter.rate(), 1024 * 1024);
+
+    // 更早的采样被窗口挤掉，速度只反映当下
+    meter.sample(2 * 1024 * 1024, 2000);
+    assert.equal(meter.rate(), 1024 * 1024);
+  });
+
+  it("暂停后不给一个虚高的速度", () => {
+    const meter = createSpeedMeter(1000);
+
+    meter.sample(0, 0);
+    meter.sample(1024, 1000);
+    // 5 秒没有任何数据：只剩最早那个过期采样，速度未知
+    meter.sample(1024, 6000);
+    assert.equal(meter.rate(), null);
   });
 
   it("sha512 字符串对得上", () => {

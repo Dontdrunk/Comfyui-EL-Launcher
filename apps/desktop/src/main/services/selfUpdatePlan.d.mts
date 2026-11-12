@@ -15,3 +15,12 @@ export function pickFile(
 export function fileNameOf(url: string): string;
 export function isLauncherAsset(name: string): boolean;
 export function sha512Base64(data: Uint8Array): string;
+
+export interface SpeedMeter {
+  /** 记一次采样：累计已下载字节 + 采样时刻 */
+  sample(bytes: number, at: number): void;
+  /** 字节/秒；不足两个有效采样时返回 null */
+  rate(): number | null;
+}
+
+export function createSpeedMeter(windowMs?: number): SpeedMeter;

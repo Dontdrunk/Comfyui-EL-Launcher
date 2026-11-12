@@ -7,7 +7,6 @@ import { join } from "node:path";
 import type { Readable } from "node:stream";
 
 import { app, ipcMain, net, session } from "electron";
-import type { BrowserWindow } from "electron";
 
 import { IPC } from "@explorer-launcher/electron";
 import type {
@@ -16,7 +15,9 @@ import type {
 } from "@explorer-launcher/electron";
 
 import { logToFile } from "../lib/logger";
+import { UpdateProgressWindow } from "../update-window";
 import {
+  createSpeedMeter,
   fileNameOf,
   isLauncherAsset,
   isNewer,
@@ -31,6 +32,9 @@ import { parseSemver } from "./semver.mjs";
 const UPDATE_OWNER = "Dontdrunk";
 const UPDATE_REPO = "Comfyui-EL-Launcher";
 
+/** 下载进度事件的最小间隔：每个数据块都发 IPC，大包时一秒几百次，界面反而会卡 */
+const PROGRESS_INTERVAL_MS = 180;
+
 interface GhAsset {
   name: string;
   browser_download_url: string;
@@ -38,6 +42,9 @@ interface GhAsset {
 
 interface GhRelease {
   assets?: GhAsset[];
+  body?: string | null;
+  published_at?: string | null;
+  html_url?: string | null;
 }
 
 interface ReadyUpdate {
@@ -48,6 +55,14 @@ interface ReadyUpdate {
 
 let ready: ReadyUpdate | null = null;
 let busy = false;
+let abortRef: AbortController | null = null;
+
+class UpdateCancelledError extends Error {
+  constructor() {
+    super("已取消更新");
+    this.name = "UpdateCancelledError";
+  }
+}
 
 function currentVersion(): string {
   const v = app.getVersion();
@@ -58,6 +73,11 @@ function currentVersion(): string {
   const raw = readFileSync(join(app.getAppPath(), "package.json"), "utf-8");
 
   return (JSON.parse(raw) as { version: string }).version;
+}
+
+/** 便携版把当前 exe 当数据目录的孩子换了；安装版走 setup.exe */
+function isPortable(): boolean {
+  return Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
 }
 
 function userAgent(): string {
@@ -95,7 +115,7 @@ function ghHeaders(): Record<string, string> {
   };
 }
 
-async function fetchLatest(): Promise<GhAsset[]> {
+async function fetchLatest(): Promise<GhRelease> {
   const res = await session.defaultSession.fetch(
     `https://api.github.com/repos/${UPDATE_OWNER}/${UPDATE_REPO}/releases/latest`,
     { headers: ghHeaders() }
@@ -104,9 +124,8 @@ async function fetchLatest(): Promise<GhAsset[]> {
   if (!res.ok) {
     throw new Error(`GitHub API 返回 ${res.status}`);
   }
-  const json = (await res.json()) as GhRelease;
 
-  return Array.isArray(json.assets) ? json.assets : [];
+  return (await res.json()) as GhRelease;
 }
 
 async function fetchText(url: string): Promise<string> {
@@ -129,19 +148,85 @@ function headerNumber(value: string | string[] | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** 每个阶段都带齐字段：渲染进程只按 stage 渲染，不用猜哪个字段这次有值 */
+function progressOf(
+  stage: SelfUpdateProgress["stage"],
+  extra: Partial<SelfUpdateProgress> = {}
+): SelfUpdateProgress {
+  return {
+    stage,
+    percent: null,
+    receivedBytes: 0,
+    totalBytes: null,
+    bytesPerSecond: null,
+    message: null,
+    ...extra,
+  };
+}
+
+function baseStatus(): Pick<
+  SelfUpdateStatus,
+  "currentVersion" | "packaged" | "portable"
+> {
+  return {
+    currentVersion: currentVersion(),
+    packaged: app.isPackaged,
+    portable: isPortable(),
+  };
+}
+
+function statusOf(
+  state: SelfUpdateStatus["state"],
+  fields: Partial<SelfUpdateStatus>
+): SelfUpdateStatus {
+  return {
+    ...baseStatus(),
+    state,
+    version: null,
+    message: null,
+    notes: null,
+    publishedAt: null,
+    releaseUrl: null,
+    size: null,
+    ...fields,
+  };
+}
+
 async function downloadTo(
   url: string,
   dest: string,
-  onProgress: (percent: number) => void
+  onChunk: (received: number, total: number | null) => void,
+  signal: AbortSignal
 ): Promise<void> {
   assertHttps(url);
 
-  return new Promise((resolve, reject) => {
+  return await new Promise<void>((resolve, reject) => {
     const req = net.request({
       url,
       redirect: "follow",
       session: session.defaultSession,
     });
+    let settled = false;
+    let file: ReturnType<typeof createWriteStream> | null = null;
+    const detachAbort = (): void => {
+      signal.removeEventListener("abort", onAbort);
+    };
+    const fail = (error: Error): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      detachAbort();
+      file?.destroy();
+      reject(error);
+    };
+    // 取消按钮：中止请求、丢掉半截文件，installSelfUpdate 会按 aborted 收尾
+    function onAbort(): void {
+      req.abort();
+      fail(new UpdateCancelledError());
+    }
+
+    signal.addEventListener("abort", onAbort, { once: true });
 
     req.setHeader("User-Agent", userAgent());
     req.setHeader("Accept", "application/octet-stream");
@@ -152,32 +237,19 @@ async function downloadTo(
 
       if (code !== 200) {
         body.resume();
-        reject(new Error(`下载失败（HTTP ${code}）`));
+        fail(new Error(`下载失败（HTTP ${code}）`));
 
         return;
       }
 
-      const total = headerNumber(res.headers["content-length"]);
+      const length = headerNumber(res.headers["content-length"]);
+      const total = length > 0 ? length : null;
       let got = 0;
-      let settled = false;
-      const file = createWriteStream(dest);
 
-      const fail = (err: Error): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        body.unpipe(file);
-        file.destroy();
-        reject(err);
-      };
-
+      file = createWriteStream(dest);
       body.on("data", (chunk: Buffer) => {
         got += chunk.length;
-
-        if (total > 0) {
-          onProgress(Math.min(99, Math.round((got / total) * 100)));
-        }
+        onChunk(got, total);
       });
       body.on("error", fail);
       file.on("error", fail);
@@ -186,31 +258,28 @@ async function downloadTo(
           return;
         }
         settled = true;
+        detachAbort();
         resolve();
       });
       body.pipe(file);
     });
-    req.on("error", reject);
+    req.on("error", (error: Error) => {
+      fail(error);
+    });
     req.end();
   });
 }
 
 async function checkSelfUpdate(): Promise<SelfUpdateStatus> {
-  const packaged = app.isPackaged;
-
   try {
-    const assets = await fetchLatest();
+    const release = await fetchLatest();
+    const assets = Array.isArray(release.assets) ? release.assets : [];
     const ymlAsset = assets.find((a) => a.name === "latest.yml");
 
     if (!ymlAsset?.browser_download_url) {
       ready = null;
 
-      return {
-        state: "error",
-        version: null,
-        message: "发布里没有 latest.yml",
-        packaged,
-      };
+      return statusOf("error", { message: "发布里没有 latest.yml" });
     }
 
     const parsed = parseLatestYml(
@@ -220,25 +289,25 @@ async function checkSelfUpdate(): Promise<SelfUpdateStatus> {
     if (!parsed || !parseSemver(parsed.version)) {
       ready = null;
 
-      return {
-        state: "error",
-        version: null,
-        message: "latest.yml 无法解析",
-        packaged,
-      };
+      return statusOf("error", { message: "latest.yml 无法解析" });
     }
 
-    const current = currentVersion();
+    const releaseFields: Pick<
+      SelfUpdateStatus,
+      "notes" | "publishedAt" | "releaseUrl"
+    > = {
+      notes: release.body?.trim() ? release.body : null,
+      publishedAt: release.published_at ?? null,
+      releaseUrl: release.html_url ?? null,
+    };
 
-    if (!isNewer(current, parsed.version)) {
+    if (!isNewer(currentVersion(), parsed.version)) {
       ready = null;
 
-      return {
-        state: "latest",
+      return statusOf("latest", {
         version: parsed.version,
-        message: null,
-        packaged,
-      };
+        ...releaseFields,
+      });
     }
 
     const map = new Map<string, string>();
@@ -251,20 +320,15 @@ async function checkSelfUpdate(): Promise<SelfUpdateStatus> {
 
     ready = { version: parsed.version, files: parsed.files, assets: map };
 
-    return {
-      state: "available",
+    return statusOf("available", {
       version: parsed.version,
-      message: null,
-      packaged,
-    };
+      size: pickFile(parsed.files, isPortable())?.size ?? null,
+      ...releaseFields,
+    });
   } catch (error) {
     ready = null;
-    return {
-      state: "error",
-      version: null,
-      message: readable(error),
-      packaged,
-    };
+
+    return statusOf("error", { message: readable(error) });
   }
 }
 
@@ -314,23 +378,49 @@ function swapPortable(next: string, current: string): void {
   );
 }
 
-async function installSelfUpdate(
-  onProgress: (percent: number) => void
-): Promise<void> {
-  if (!app.isPackaged) {
-    throw new Error("开发模式不会替换当前进程");
-  }
-  const portablePath = process.env.PORTABLE_EXECUTABLE_FILE ?? "";
-  const portable = portablePath.length > 0;
+/** 主窗口与进度窗口都由应用入口提供，service 不直接依赖 index.ts */
+interface SelfUpdateHost {
+  showMainWindow: () => void;
+  hideMainWindow: () => void;
+  /** preload 脚本路径，进度窗口要用同一套 IPC */
+  preload: string;
+  /** 进度页地址（不带查询串），例如 https://app.localhost/update.html */
+  updatePageBase: string;
+}
 
-  if (!portable && process.execPath.toLowerCase().includes("win-unpacked")) {
+let progressWindow: UpdateProgressWindow | null = null;
+
+type InstallPhase = "running" | "error" | "quitting";
+
+const closeProgressWindow = (): void => {
+  progressWindow?.close();
+  progressWindow = null;
+};
+
+/**
+ * 下载 → 校验 → 启动安装程序。
+ * 主窗口在进度窗口立起来之后才藏；进度只发给进度窗口，
+ * 失败时窗口留着让用户点「返回启动器」，取消则直接收窗口回主界面。
+ */
+async function installSelfUpdate(host: SelfUpdateHost): Promise<void> {
+  if (!app.isPackaged) {
+    throw new Error("开发模式不会替换当前进程，请用安装版或便携版测试自更新。");
+  }
+  if (
+    !isPortable() &&
+    process.execPath.toLowerCase().includes("win-unpacked")
+  ) {
     throw new Error("解包目录不能原地更新，请用安装版或便携版。");
   }
-
   if (busy) {
-    throw new Error("正在更新");
+    throw new Error("正在更新，请稍候。");
   }
+
   busy = true;
+  const controller = new AbortController();
+  abortRef = controller;
+  let phase: InstallPhase = "running";
+  let progressWin: UpdateProgressWindow | null = null;
 
   try {
     if (!ready) {
@@ -341,7 +431,9 @@ async function installSelfUpdate(
       }
     }
 
-    const file = pickFile(ready.files, portable);
+    const target = ready;
+    const portable = isPortable();
+    const file = pickFile(target.files, portable);
 
     if (!file) {
       throw new Error(portable ? "发布里没有便携版" : "发布里没有安装包");
@@ -351,53 +443,139 @@ async function installSelfUpdate(
     if (!isLauncherAsset(name)) {
       throw new Error(`更新包文件名不符合预期：${name}`);
     }
-    const url = ready.assets.get(name);
+    const url = target.assets.get(name);
 
     if (!url) {
       throw new Error(`发布里没有 ${name}`);
     }
     const dest = join(tmpdir(), name);
 
-    try {
-      await downloadTo(url, dest, onProgress);
-      const info = await stat(dest);
-      const digest = sha512Base64(await readFile(dest));
+    await rm(dest, { force: true }).catch(() => undefined);
 
-      if (info.size !== file.size || digest !== file.sha512) {
-        throw new Error("更新包校验失败，已删除下载文件。");
-      }
+    // 先让进度窗口挂载，再藏主窗口：界面上不会出现「什么都没有」的空档
+    progressWin = new UpdateProgressWindow({
+      preload: host.preload,
+      url: `${host.updatePageBase}?from=${encodeURIComponent(
+        currentVersion()
+      )}&to=${encodeURIComponent(target.version)}`,
+      onClosed: () => {
+        if (phase === "quitting") {
+          return;
+        }
+        if (phase === "running") {
+          controller.abort();
+        }
+        host.showMainWindow();
+      },
+    });
+    progressWindow = progressWin;
+    await progressWin.open();
+    host.hideMainWindow();
+
+    const emit = (progress: SelfUpdateProgress): void => {
+      progressWin?.send(progress);
+    };
+
+    const meter = createSpeedMeter();
+    const total = file.size;
+    let lastSentAt = 0;
+
+    emit(progressOf("downloading", { percent: 0, totalBytes: total }));
+
+    try {
+      await downloadTo(
+        url,
+        dest,
+        (received) => {
+          const now = Date.now();
+
+          meter.sample(received, now);
+          if (now - lastSentAt < PROGRESS_INTERVAL_MS) {
+            return;
+          }
+          lastSentAt = now;
+          emit(
+            progressOf("downloading", {
+              percent:
+                total > 0
+                  ? Math.min(99, Math.floor((received / total) * 100))
+                  : null,
+              receivedBytes: received,
+              totalBytes: total,
+              bytesPerSecond: meter.rate(),
+            })
+          );
+        },
+        controller.signal
+      );
     } catch (error) {
       await rm(dest, { force: true }).catch(() => undefined);
       throw error;
     }
 
-    onProgress(100);
-    logToFile("自更新：校验通过，准备退出", { version: ready.version, name });
+    emit(
+      progressOf("downloading", {
+        percent: 100,
+        receivedBytes: total,
+        totalBytes: total,
+        bytesPerSecond: meter.rate(),
+      })
+    );
+    emit(progressOf("verifying", { message: "正在校验更新包…" }));
+
+    const info = await stat(dest);
+    const digest = sha512Base64(await readFile(dest));
+
+    if (info.size !== file.size || digest !== file.sha512) {
+      await rm(dest, { force: true }).catch(() => undefined);
+      throw new Error("更新包校验失败，已删除下载文件，请重试。");
+    }
+
+    logToFile("自更新：校验通过，准备退出", {
+      version: target.version,
+      name,
+    });
+    emit(
+      progressOf("installing", {
+        message: portable ? "正在替换便携版并重启…" : "正在启动安装程序…",
+      })
+    );
 
     if (portable) {
-      swapPortable(dest, portablePath);
+      swapPortable(dest, process.env.PORTABLE_EXECUTABLE_FILE ?? "");
     } else {
       launchSetup(dest);
     }
+    phase = "quitting";
     app.quit();
+  } catch (error) {
+    logToFile("自更新失败", error);
+
+    if (controller.signal.aborted) {
+      closeProgressWindow();
+      host.showMainWindow();
+    } else if (progressWin !== null && progressWin.opened) {
+      phase = "error";
+      progressWin.send(progressOf("error", { message: readable(error) }));
+    } else {
+      throw error;
+    }
   } finally {
     busy = false;
+    abortRef = null;
   }
 }
 
-export function registerSelfUpdateIpc(
-  getWindow: () => BrowserWindow | null
-): void {
+export function registerSelfUpdateIpc(host: SelfUpdateHost): void {
   ipcMain.handle(IPC.selfUpdateStatus, async () => checkSelfUpdate());
   ipcMain.handle(IPC.selfUpdateInstall, async () => {
-    await installSelfUpdate((percent) => {
-      const win = getWindow();
-
-      if (!win || win.isDestroyed()) {
-        return;
-      }
-      const payload: SelfUpdateProgress = { percent };
-      win.webContents.send(IPC.evtSelfUpdate, payload);
-    });
+    await installSelfUpdate(host);
+  });
+  ipcMain.handle(IPC.selfUpdateCancel, () => {
+    abortRef?.abort();
+  });
+  ipcMain.handle(IPC.selfUpdateDismiss, () => {
+    closeProgressWindow();
+    host.showMainWindow();
   });
 }

@@ -93,6 +93,23 @@ export default defineConfig({
         },
       },
       {
+        // 自更新弹窗沿用仪表台的类名体系，.update / .update__* 定义在
+        // 同目录 self-update-dialog.css，不是 Tailwind 生成的工具类。
+        files: ["apps/web/src/components/self-update-dialog.tsx"],
+        rules: {
+          "shadcn/no-unknown-classes": "off",
+        },
+      },
+      {
+        // 进度窗口是独立页面，.upd / .upd__* 定义在同目录 update-progress.css；
+        // 进度条宽度是唯一的内联样式，按真实百分比给。
+        files: ["apps/web/src/components/update-progress.tsx"],
+        rules: {
+          "shadcn/no-unknown-classes": "off",
+          "shadcn/no-inline-styles": "off",
+        },
+      },
+      {
         // 旧项目原样迁入的代码：格式化和类型检查照跑，风格类规则先豁免。
         // 这是搬运而不是重写——1.7 万行一次性改成 ultracite 风格不现实，
         // 但真正会出 BUG 的规则（hook 依赖、eqeqeq、未使用变量、类型错误）保持开启。

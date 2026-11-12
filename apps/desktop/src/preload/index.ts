@@ -313,6 +313,13 @@ const api: LauncherApi = {
     ipcRenderer.invoke(IPC.selfUpdateStatus) as Promise<SelfUpdateStatus>,
   selfUpdateInstall: async () =>
     ipcRenderer.invoke(IPC.selfUpdateInstall) as Promise<void>,
+  selfUpdateCancel: async () =>
+    ipcRenderer.invoke(IPC.selfUpdateCancel) as Promise<void>,
+  selfUpdateUiReady: () => {
+    ipcRenderer.send(IPC.selfUpdateUiReady);
+  },
+  selfUpdateDismiss: async () =>
+    ipcRenderer.invoke(IPC.selfUpdateDismiss) as Promise<void>,
   onSelfUpdate: (cb) => subscribe<SelfUpdateProgress>(IPC.evtSelfUpdate, cb),
 };
 

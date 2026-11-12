@@ -108,5 +108,10 @@ export const IPC = {
   /* ---- 启动器自身更新 ---- */
   selfUpdateStatus: "self-update:status",
   selfUpdateInstall: "self-update:install",
+  selfUpdateCancel: "self-update:cancel",
+  /** 进度窗口已挂载，主进程据此开始下载，避免错过第一批阶段事件 */
+  selfUpdateUiReady: "self-update:ui-ready",
+  /** 进度窗口关掉自己、把主窗口请回来（失败后「返回启动器」） */
+  selfUpdateDismiss: "self-update:dismiss",
   evtSelfUpdate: "evt:selfUpdate",
 } as const;

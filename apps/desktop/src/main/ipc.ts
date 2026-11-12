@@ -19,7 +19,6 @@ import { registerVersionIpc } from "./ipc-version";
 import { applyTitleBarTheme } from "./lib/titlebar";
 import { checkLayout, probeDisk, probeRuntime } from "./services/env";
 import { jobManager } from "./services/jobs";
-import { registerSelfUpdateIpc } from "./services/selfUpdate";
 import { serviceManager } from "./services/service";
 import { pickRoot, settingsStore } from "./services/settings";
 
@@ -252,9 +251,6 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   /* ────────── 环境管理 ────────── */
   registerPipIpc(getWindow);
-
-  /* ────────── 启动器自身更新 ────────── */
-  registerSelfUpdateIpc(getWindow);
 }
 
 /** 把主进程产生的日志/状态/任务事件推给渲染进程 */

@@ -1,0 +1,239 @@
+/* 自更新弹窗：仪表台语言（发丝线 / 等宽数字 / 发丝分区） */
+
+.update {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+/* ── 版本读数：当前安装 → 可更新 ── */
+
+.update__transit {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-4);
+}
+
+.update__version {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.update__label {
+  font-size: var(--fs-micro);
+  color: var(--fg-muted);
+}
+
+.update__num {
+  font-size: var(--fs-xl);
+  line-height: 1.1;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.update__version--next .update__num {
+  color: var(--fg);
+}
+
+.update__connector {
+  flex: 1 1 auto;
+  min-width: 48px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-bottom: 5px;
+  color: var(--stroke-strong);
+}
+
+.update__connector-line {
+  flex: 1 1 auto;
+  height: 1px;
+  background: currentColor;
+}
+
+/* ── 元信息 ── */
+
+.update__facts {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-top: calc(-1 * var(--sp-2));
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.update__fact {
+  min-width: 0;
+}
+
+.update__link {
+  margin-left: auto;
+  color: var(--accent-line);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.update__link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.update__hint,
+.update__latest {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--warn-text);
+}
+
+.update__latest {
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+}
+
+/* ── 更新说明：只有一条顶部分隔线，不做内嵌盒子 ── */
+
+.update__notes {
+  border-top: 1px solid var(--stroke);
+  padding-top: var(--sp-3);
+}
+
+.update__empty {
+  font-size: var(--fs-sm);
+  color: var(--fg-dim);
+}
+
+.update__notes-body {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: var(--sp-2);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  color: var(--fg-muted);
+  user-select: text;
+}
+
+.update__notes-body > :first-child {
+  margin-top: 0;
+}
+
+.update__notes-body > :last-child {
+  margin-bottom: 0;
+}
+
+.update__notes-body h1,
+.update__notes-body h2,
+.update__notes-body h3,
+.update__notes-body h4 {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.update__notes-body h1 {
+  font-size: var(--fs-lg);
+}
+
+.update__notes-body p {
+  margin: var(--sp-2) 0;
+}
+
+.update__notes-body ul,
+.update__notes-body ol {
+  margin: var(--sp-2) 0;
+  padding-left: var(--sp-5);
+}
+
+.update__notes-body ul {
+  list-style: disc outside;
+}
+
+.update__notes-body ol {
+  list-style: decimal outside;
+}
+
+.update__notes-body li {
+  display: list-item;
+}
+
+.update__notes-body li::marker {
+  color: var(--fg-faint);
+}
+
+.update__notes-body a {
+  color: var(--accent-line);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.update__notes-body code {
+  padding: 1px 4px;
+  background: var(--bg-surface);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.update__notes-body pre {
+  overflow-x: auto;
+  padding: var(--sp-3);
+  background: var(--bg-surface);
+}
+
+.update__notes-body pre code {
+  padding: 0;
+  background: none;
+}
+
+.update__notes-body img {
+  max-width: 100%;
+}
+
+.update__notes-body hr {
+  margin: var(--sp-3) 0;
+  border: 0;
+  border-top: 1px solid var(--stroke);
+}
+
+.update__notes-body blockquote {
+  margin: var(--sp-2) 0;
+  padding-left: var(--sp-3);
+  border-left: 2px solid var(--stroke-strong);
+  color: var(--fg-faint);
+}
+
+.update__notes-body table {
+  border-collapse: collapse;
+}
+
+.update__notes-body th,
+.update__notes-body td {
+  padding: 4px var(--sp-2);
+  border: 1px solid var(--stroke);
+}
+
+.update__notes-body th {
+  background: var(--bg-surface);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* ── 失败提示：LED 行 + 左侧红规，不用内嵌卡片 ── */
+
+.update__error {
+  padding-left: var(--sp-3);
+  border-left: 2px solid var(--danger-bright);
+}
+
+.update__error-msg {
+  margin: 4px 0 0;
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  color: var(--danger-text);
+  user-select: text;
+}

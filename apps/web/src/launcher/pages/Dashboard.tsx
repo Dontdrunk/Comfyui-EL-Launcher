@@ -8,6 +8,7 @@ import type {
   SelfUpdateStatus,
 } from "@explorer-launcher/electron";
 
+import { useSelfUpdate } from "../../components/self-update-dialog";
 import { BannerBackdrop } from "../components/BannerBackdrop";
 import { Icon } from "../components/Icon";
 import {
@@ -47,8 +48,7 @@ export default function Dashboard(): React.JSX.Element {
   );
 
   const [busy, setBusy] = useState(false);
-  const [selfUpdate, setSelfUpdate] = useState<SelfUpdateStatus | null>(null);
-  const [updatePercent, setUpdatePercent] = useState<number | null>(null);
+  const selfUpdate = useSelfUpdate();
   const [killConfirm, setKillConfirm] = useState(false);
   const [killing, setKilling] = useState(false);
 
@@ -57,47 +57,6 @@ export default function Dashboard(): React.JSX.Element {
       setForm(settings.launch);
     }
   }, [settings]);
-
-  useEffect(() => {
-    let alive = true;
-    void window.launcher.selfUpdateStatus().then((status) => {
-      if (alive) {
-        setSelfUpdate(status);
-      }
-    });
-
-    const off = window.launcher.onSelfUpdate((progress) => {
-      if (alive) {
-        setUpdatePercent(progress.percent);
-      }
-    });
-
-    return () => {
-      alive = false;
-      off();
-    };
-  }, []);
-
-  const onSelfUpdate = (): void => {
-    if (!selfUpdate?.packaged) {
-      pushToast("开发模式不会替换当前进程", "warn");
-
-      return;
-    }
-
-    setUpdatePercent(0);
-    void window.launcher.selfUpdateInstall().catch((error: unknown) => {
-      setUpdatePercent(null);
-      const raw = error instanceof Error ? error.message : String(error);
-
-      const message = raw.replace(
-        /^Error invoking remote method '[^']+': (?:Error: )?/,
-        ""
-      );
-
-      pushToast(message, "error");
-    });
-  };
 
   const state = service?.state ?? "stopped";
   const isActive = state === "running" || state === "launching";
@@ -241,7 +200,7 @@ export default function Dashboard(): React.JSX.Element {
         <Readout
           label="软件版本"
           value={`v${APP_VERSION}`}
-          hint={versionHint(selfUpdate, updatePercent, onSelfUpdate)}
+          hint={versionHint(selfUpdate.status, selfUpdate.openDialog)}
           mono
         />
       </Readouts>
@@ -473,30 +432,23 @@ export default function Dashboard(): React.JSX.Element {
           </Panel>
         </>
       )}
+
+      {selfUpdate.dialog}
     </>
   );
 }
 
 function versionHint(
   status: SelfUpdateStatus | null,
-  percent: number | null,
-  onUpdate: () => void
+  onOpen: () => void
 ): React.ReactNode {
-  if (percent !== null) {
-    return (
-      <button type="button" className="readout__link" disabled>
-        {percent}%
-      </button>
-    );
-  }
-
   if (!status) {
     return "…";
   }
   if (status.state === "available") {
     return (
-      <button type="button" className="readout__link" onClick={onUpdate}>
-        更新
+      <button type="button" className="readout__link" onClick={onOpen}>
+        更新到 v{status.version}
       </button>
     );
   }

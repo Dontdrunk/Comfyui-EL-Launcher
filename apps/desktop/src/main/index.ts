@@ -13,6 +13,7 @@ import {
   parseLoopbackOrigin,
 } from "#src/main/renderer-route.ts";
 import { serveRenderer } from "#src/main/renderer.ts";
+import { registerSelfUpdateIpc } from "#src/main/services/selfUpdate.ts";
 import { serviceManager } from "#src/main/services/service.ts";
 import { settingsStore } from "#src/main/services/settings.ts";
 import { createTray, destroyTray } from "#src/main/tray.ts";
@@ -120,6 +121,25 @@ function ensureMainWindow(): BrowserWindow {
   return mainWindow;
 }
 
+/**
+ * 自更新：下载/校验/安装都在独立的小进度窗口里跑，主窗口先藏起来。
+ * 注册要拿到主窗口显隐、preload 和进度页地址，所以放在入口而不是 ipc.ts。
+ */
+function installSelfUpdateIpc(): void {
+  registerSelfUpdateIpc({
+    showMainWindow: () => {
+      presentMainWindow();
+    },
+    hideMainWindow: () => {
+      mainWindow?.hide();
+    },
+    preload: path.join(import.meta.dirname, "../preload/index.cjs"),
+    updatePageBase: devOrigin
+      ? `${devOrigin}/update.html`
+      : `${rendererOrigin}/update.html`,
+  });
+}
+
 /** 把主窗口带到前台。最小化或被别的窗口挡住时都能拉回来。 */
 function presentMainWindow(): BrowserWindow {
   const win = ensureMainWindow();
@@ -181,6 +201,7 @@ if (gotLock) {
       }
 
       registerIpc(() => mainWindow);
+      installSelfUpdateIpc();
       disposeEvents = wireEventForwarding(() => mainWindow);
 
       const win = ensureMainWindow();
