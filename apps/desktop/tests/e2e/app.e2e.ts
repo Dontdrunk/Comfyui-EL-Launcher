@@ -65,6 +65,87 @@ const makePortableRoot = async (root: string): Promise<void> => {
   await writeFile(path.join(root, "ComfyUI", "main.py"), "", "utf-8");
 };
 
+/**
+ * 造一个「本地装着旧版本、远端已经发了新版本」的 git 插件。
+ * 插件按 installFromGit 的方式浅克隆，所以第一次打开版本面板会补全历史；
+ * 远端是本地裸仓库，联网检查与 fetch 都不依赖外网。
+ */
+const makePluginWithNewerRelease = async (comfyRoot: string) => {
+  const remote = path.join(comfyRoot, "plugin-remote.git");
+  const work = path.join(comfyRoot, "plugin-work");
+
+  const pluginDir = path.join(
+    comfyRoot,
+    "ComfyUI",
+    "custom_nodes",
+    "PluginGit"
+  );
+
+  const commit = (message: string): void => {
+    execFileSync("git", ["add", "."], { cwd: work, stdio: "ignore" });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=e2e",
+        "-c",
+        "user.email=e2e@example.com",
+        "commit",
+        "-q",
+        "-m",
+        message,
+      ],
+      { cwd: work, stdio: "ignore" }
+    );
+  };
+
+  const push = (): void => {
+    execFileSync(
+      "git",
+      ["push", "-q", "origin", "HEAD:refs/heads/master", "--tags"],
+      { cwd: work, stdio: "ignore" }
+    );
+  };
+
+  await mkdir(work, { recursive: true });
+  execFileSync("git", ["init", "-q", "--bare", remote], { stdio: "ignore" });
+  // 裸仓库的 HEAD 指到要推的分支，否则 clone 出来的工作区是空的
+  execFileSync(
+    "git",
+    ["--git-dir", remote, "symbolic-ref", "HEAD", "refs/heads/master"],
+    { stdio: "ignore" }
+  );
+  execFileSync("git", ["init", "-q"], { cwd: work, stdio: "ignore" });
+  await writeFile(path.join(work, "README.md"), "old\n", "utf-8");
+  commit("old version");
+  execFileSync("git", ["tag", "v1.0.0"], { cwd: work, stdio: "ignore" });
+  execFileSync("git", ["remote", "add", "origin", remote], {
+    cwd: work,
+    stdio: "ignore",
+  });
+  push();
+  execFileSync(
+    "git",
+    [
+      "clone",
+      "-q",
+      "--depth=1",
+      `file:///${remote.replaceAll("\\", "/")}`,
+      pluginDir,
+    ],
+    { stdio: "ignore" }
+  );
+
+  /** 远端发布下一个版本（已安装的那份代码不动） */
+  const publishNewerRelease = async (): Promise<void> => {
+    await writeFile(path.join(work, "README.md"), "new\n", "utf-8");
+    commit("new version with fix");
+    push();
+  };
+
+  return { publishNewerRelease };
+};
+
 /** 全新安装：连 config.json 都没有，默认设置必须处于「未配置根目录」 */
 const launchFresh = async (): Promise<Launched> => {
   const userData = await mkdtemp(
@@ -508,5 +589,122 @@ test("the theme switch survives a reload", async () => {
     await expect(html).toHaveAttribute("data-theme", "light");
   } finally {
     await close(launched);
+  }
+});
+
+test("the window reopens at the size it was left at", async () => {
+  const first = await launch();
+
+  await first.application.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.setSize(1000, 740);
+  });
+  await first.application.close();
+
+  // 同一个 userData 再启动一次：尺寸必须和上次退出时一致
+  const second = await launchProfile(first.userData);
+
+  try {
+    const size = await second.application.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.getSize()
+    );
+
+    expect(size).toStrictEqual([1000, 740]);
+  } finally {
+    await close(second);
+  }
+});
+
+test("the version list picks up a release published after the panel first opened", async () => {
+  const comfyRoot = await mkdtemp(
+    path.join(os.tmpdir(), "explorer-launcher-comfy-")
+  );
+
+  await makePortableRoot(comfyRoot);
+  const { publishNewerRelease } = await makePluginWithNewerRelease(comfyRoot);
+
+  const launched = await launch({ comfyRoot });
+
+  try {
+    const { page } = launched;
+
+    await page.getByRole("link", { name: "插件管理" }).click();
+
+    const row = page.locator("tbody tr").filter({ hasText: "PluginGit" });
+    const modal = page.locator(".modal");
+
+    // 第一次打开：浅克隆被补全历史，此时远端还只有旧版本
+    await row.getByRole("button", { name: "切换版本" }).click();
+    await expect(modal.getByText("old version")).toBeVisible();
+    await modal
+      .locator(".modal__foot")
+      .getByRole("button", { name: "关闭" })
+      .click();
+    await expect(modal).toHaveCount(0);
+
+    await publishNewerRelease();
+    await page.getByTitle("重新读取插件目录，并联网检查更新").click();
+    await expect(row.getByText("更新")).toBeVisible();
+
+    /*
+     * 再打开：远端之后发的版本必须出现在列表顶部。
+     * 只补一次历史的话，这里永远只有旧版本 —— 角标说「更新」，
+     * 列表里却没法切过去。
+     */
+    await row.getByRole("button", { name: "切换版本" }).click();
+    await expect(
+      modal.locator("tbody tr").first().getByText("new version with fix")
+    ).toBeVisible();
+    await expect(
+      modal
+        .locator("tbody tr")
+        .filter({ hasText: "old version" })
+        .getByText("当前版本")
+    ).toBeVisible();
+  } finally {
+    await close(launched);
+    await rm(comfyRoot, { force: true, recursive: true });
+  }
+});
+
+test("switching to the newest version clears the update mark", async () => {
+  const comfyRoot = await mkdtemp(
+    path.join(os.tmpdir(), "explorer-launcher-comfy-")
+  );
+
+  await makePortableRoot(comfyRoot);
+  const { publishNewerRelease } = await makePluginWithNewerRelease(comfyRoot);
+
+  await publishNewerRelease();
+
+  const launched = await launch({ comfyRoot });
+
+  try {
+    const { page } = launched;
+
+    await page.getByRole("link", { name: "插件管理" }).click();
+
+    const row = page.locator("tbody tr").filter({ hasText: "PluginGit" });
+
+    await expect(row.getByText("更新")).toBeVisible();
+
+    await row.getByRole("button", { name: "切换版本" }).click();
+
+    const modal = page.locator(".modal");
+
+    await modal
+      .locator("tbody tr")
+      .first()
+      .getByRole("button", { name: "切换" })
+      .click();
+
+    // 切到远端尖端：列表里它成了当前版本，行上的「更新」必须回到「最新」
+    await expect(
+      modal.locator("tbody tr").first().getByText("当前版本")
+    ).toBeVisible();
+    await expect(row.getByText("最新")).toBeVisible();
+    await expect(row.getByText("更新")).toHaveCount(0);
+  } finally {
+    await close(launched);
+    await rm(comfyRoot, { force: true, recursive: true });
   }
 });

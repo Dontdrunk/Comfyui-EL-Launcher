@@ -1128,14 +1128,13 @@ export async function nodeReleases(
   }
 
   /*
-   * 装插件用的是 git clone --depth=1，浅克隆只有一条提交 ——
-   * 版本列表会假得只有一行。所以打开面板时自动补历史（用户不用点任何按钮）。
+   * 版本列表必须跟着远端走：
+   *  - 装插件用的是 git clone --depth=1，浅克隆只有一条提交 —— 列表会假得只剩一行，
+   *    所以浅克隆一律先补全历史（顺手把新提交一起取回来）。
+   *  - 补全过的仓库不会变回浅克隆，远端之后发布的新版本只能靠 fetch 才进列表；
+   *    少了这一步，行上亮着「更新」、列表里却找不到那个新版本。
    */
-  if (fetch) {
-    await gitSoft(dir, ["fetch", "--all", "--tags", "--prune", "--quiet"], {
-      timeoutMs: 300_000,
-    });
-  } else if (await pathExists(join(dir, ".git", "shallow"))) {
+  if (await pathExists(join(dir, ".git", "shallow"))) {
     const un = await gitRaw(
       dir,
       ["fetch", "--unshallow", "--tags", "--quiet"],
@@ -1150,6 +1149,10 @@ export async function nodeReleases(
         timeoutMs: 300_000,
       });
     }
+  } else if (fetch) {
+    await gitSoft(dir, ["fetch", "--all", "--tags", "--prune", "--quiet"], {
+      timeoutMs: 300_000,
+    });
   }
 
   const [head, branch, remote, log, branchLines, defaultRef] =

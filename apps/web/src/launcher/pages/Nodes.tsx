@@ -666,6 +666,8 @@ export default function Nodes(): React.JSX.Element {
       pushToast(`插件 ${node.baseName} 已切到 ${label}（重启 ComfyUI 后生效）`);
       await openVersions(node, false);
       await refresh();
+      // 切换改了本地 HEAD，不重算的话「更新」角标会一直挂着
+      await doCheckUpdates();
     } finally {
       setVerSwitching(null);
     }
@@ -940,7 +942,8 @@ export default function Nodes(): React.JSX.Element {
                             <button
                               type="button"
                               className="rowlink"
-                              onClick={() => void openVersions(n)}
+                              /* 打开面板就联网补一次历史：否则远端后来发布的版本永远进不了列表 */
+                              onClick={() => void openVersions(n, true)}
                             >
                               切换版本
                             </button>
