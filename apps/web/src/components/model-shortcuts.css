@@ -24,16 +24,23 @@
 }
 
 .quickbar__list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  display: flex;
   gap: var(--sp-2);
+  /* 卡片排成一行；放不下时横向滚动，不换行、不压缩 */
+  padding: 2px 1px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
 }
 
 .quickcard {
   position: relative;
   display: flex;
+  /* 宽度在 224–320px 之间随行宽分配；放不下时不再压缩，交给列表横向滚动 */
+  flex: 1 0 224px;
   align-items: center;
   min-width: 0;
+  max-width: 320px;
   border: 1px solid var(--stroke);
   background: var(--bg-surface);
 }
